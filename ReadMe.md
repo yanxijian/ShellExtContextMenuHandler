@@ -122,24 +122,24 @@ In Visual Studio 2010, create a Visual C++ / Win32 / Win32 Project named "CppShe
 
 Shell extension handlers are all in-process COM objects implemented as DLLs. Making a basic COM includes implementing DllGetClassObject, DllCanUnloadNow, DllRegisterServer, and DllUnregisterServer in (and exporting them from) the DLL, adding a COM class with the basic implementation of the IUnknown interface, preparing the class factory for your COM class. The relevant files in this code sample are:
 
-  dllmain.cpp - implements DllMain and the DllGetClassObject, DllCanUnloadNow, 
+  **dllmain.cpp** - implements DllMain and the DllGetClassObject, DllCanUnloadNow, 
     DllRegisterServer, DllUnregisterServer functions that are necessary for a 
     COM DLL. 
 
-  GlobalExportFunctions.def - exports the DllGetClassObject, DllCanUnloadNow, 
+  **GlobalExportFunctions.def** - exports the DllGetClassObject, DllCanUnloadNow, 
     DllRegisterServer, DllUnregisterServer functions from the DLL through the 
     module-definition file. You need to pass the .def file to the linker by 
     configuring the Module Definition File property in the project's Property 
     Pages / Linker / Input property page.
 
-  Reg.h/cpp - defines the reusable helper functions to register or unregister 
+  **Reg.h/cpp** - defines the reusable helper functions to register or unregister 
     in-process COM components in the registry: 
     RegisterInprocServer, UnregisterInprocServer
 
-  FileContextMenuExt.h/cpp - defines the COM class. You can find the basic 
+  **FileContextMenuExt.h/cpp** - defines the COM class. You can find the basic 
     implementation of the IUnknown interface in the files.
 
-  ClassFactory.h/cpp - defines the class factory for the COM class. 
+  **ClassFactory.h/cpp** - defines the class factory for the COM class. 
 
 -----------------------------------------------------------------------------
 
