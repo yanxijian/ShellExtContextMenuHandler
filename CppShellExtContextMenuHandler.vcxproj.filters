@@ -15,13 +15,13 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="ReadMe.txt" />
     <None Include="GlobalExportFunctions.def">
       <Filter>Source Files</Filter>
     </None>
     <None Include="OK.bmp">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="ReadMe.md" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">

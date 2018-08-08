@@ -158,7 +158,7 @@
   <ItemGroup>
     <None Include="GlobalExportFunctions.def" />
     <None Include="OK.bmp" />
-    <None Include="ReadMe.txt" />
+    <None Include="ReadMe.md" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ClassFactory.h" />

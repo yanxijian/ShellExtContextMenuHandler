@@ -1,9 +1,23 @@
-=============================================================================
-    DYNAMIC LINK LIBRARY : CppShellExtContextMenuHandler Project Overview
+## This project is modified from:    
+https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a
+
+***
+# Changes:
+## 1. Add a common.h to define some strings
+## 2. Add context menu to any file type(*), but still support to filter file type
+
+## * The second change make it possible to show context menu when file type is not associated with the program.
+
+***
+
 =============================================================================
 
-/////////////////////////////////////////////////////////////////////////////
-Summary:
+## DYNAMIC LINK LIBRARY : CppShellExtContextMenuHandler Project Overview
+
+=============================================================================
+
+/////////////////////////////////////////////////////////////////////////////    
+## Summary:
 
 The code sample demonstrates creating a Shell context menu handler with C++. 
 
@@ -31,7 +45,7 @@ item brings up a message box that displays the full path of the .cpp file.
 /////////////////////////////////////////////////////////////////////////////
 Setup and Removal:
 
-A. Setup
+### A. Setup
 
 If you are going to use the Shell extension in a x64 Windows system, please 
 configure the Visual C++ project to target 64-bit platforms using project 
@@ -52,7 +66,7 @@ saying:
 
     "DllRegisterServer in CppShellExtContextMenuHandler.dll succeeded."
 
-B. Removal
+### B. Removal
 
 In a command prompt running as administrator, navigate to the folder that 
 contains the build result CppShellExtContextMenuHandler.dll and enter the 
@@ -67,40 +81,26 @@ box saying:
 
 
 /////////////////////////////////////////////////////////////////////////////
-Demo:
+### Demo:
 
 The following steps walk through a demonstration of the context menu handler 
 code sample.
 
-Step1. If you are going to use the Shell extension in a x64 Windows system, 
-please configure the Visual C++ project to target 64-bit platforms using 
-project configurations (http://msdn.microsoft.com/en-us/library/9yb4317s.aspx). 
-Only 64-bit extension DLLs can be loaded in the 64-bit Windows Shell. 
+Step1. If you are going to use the Shell extension in a x64 Windows system, please configure the Visual C++ project to target 64-bit platforms using project configurations (http://msdn.microsoft.com/en-us/library/9yb4317s.aspx). Only 64-bit extension DLLs can be loaded in the 64-bit Windows Shell. 
 
-If the extension is to be loaded in a 32-bit Windows system, you can use the 
-default Win32 project configuration.
+If the extension is to be loaded in a 32-bit Windows system, you can use the default Win32 project configuration.
 
-Step2. After you successfully build the sample project in Visual Studio 2010, 
-you will get a DLL: CppShellExtContextMenuHandler.dll. Start a command prompt 
-as administrator, navigate to the folder that contains the file and enter the 
-command:
+Step2. After you successfully build the sample project in Visual Studio 2010, you will get a DLL: CppShellExtContextMenuHandler.dll. Start a command prompt as administrator, navigate to the folder that contains the file and enter the command:
 
     Regsvr32.exe CppShellExtContextMenuHandler.dll
 
-The context menu handler is registered successfully if you see a message box 
-saying:
+The context menu handler is registered successfully if you see a message box saying:
 
     "DllRegisterServer in CppShellExtContextMenuHandler.dll succeeded."
 
-Step3. Find a .cpp file in the Windows Explorer (e.g. FileContextMenuExt.cpp 
-in the sample folder), and right click it. You would see the "Display File 
-Name (C++)" menu item with icon in the context menu and a menu seperator 
-below it. Clicking the menu item brings up a message box that displays the 
-full path of the .cpp file.
+Step3. Find a .cpp file in the Windows Explorer (e.g. FileContextMenuExt.cpp in the sample folder), and right click it. You would see the "Display File Name (C++)" menu item with icon in the context menu and a menu seperator below it. Clicking the menu item brings up a message box that displays the full path of the .cpp file.
 
-The "Display File Name (C++)" menu item is added and displayed when only one 
-.cpp file is selected and right-clicked. If more than one file are selected 
-in the Windows Explorer, you will not see the context menu item.
+The "Display File Name (C++)" menu item is added and displayed when only one .cpp file is selected and right-clicked. If more than one file are selected in the Windows Explorer, you will not see the context menu item.
 
 Step4. In the same command prompt, run the command 
 
@@ -112,24 +112,15 @@ to unregister the Shell context menu handler.
 /////////////////////////////////////////////////////////////////////////////
 Implementation:
 
-A. Creating and configuring the project
+## A. Creating and configuring the project
 
-In Visual Studio 2010, create a Visual C++ / Win32 / Win32 Project named 
-"CppShellExtContextMenuHandler". In the "Application Settings" page of Win32 
-Application Wizard, select the application type as "DLL" and check the "Empty 
-project" option. After you click the Finish button, an empty Win32 DLL 
-project is created.
+In Visual Studio 2010, create a Visual C++ / Win32 / Win32 Project named "CppShellExtContextMenuHandler". In the "Application Settings" page of Win32 Application Wizard, select the application type as "DLL" and check the "Empty project" option. After you click the Finish button, an empty Win32 DLL project is created.
 
 -----------------------------------------------------------------------------
 
-B. Implementing a basic Component Object Model (COM) DLL
+## B. Implementing a basic Component Object Model (COM) DLL
 
-Shell extension handlers are all in-process COM objects implemented as DLLs. 
-Making a basic COM includes implementing DllGetClassObject, DllCanUnloadNow, 
-DllRegisterServer, and DllUnregisterServer in (and exporting them from) the 
-DLL, adding a COM class with the basic implementation of the IUnknown 
-interface, preparing the class factory for your COM class. The relevant files 
-in this code sample are:
+Shell extension handlers are all in-process COM objects implemented as DLLs. Making a basic COM includes implementing DllGetClassObject, DllCanUnloadNow, DllRegisterServer, and DllUnregisterServer in (and exporting them from) the DLL, adding a COM class with the basic implementation of the IUnknown interface, preparing the class factory for your COM class. The relevant files in this code sample are:
 
   dllmain.cpp - implements DllMain and the DllGetClassObject, DllCanUnloadNow, 
     DllRegisterServer, DllUnregisterServer functions that are necessary for a 
@@ -152,10 +143,8 @@ in this code sample are:
 
 -----------------------------------------------------------------------------
 
-C. Implementing the context menu handler and registering it for a certain 
-file class
+## C. Implementing the context menu handler and registering it for a certain file class
 
------------
 Implementing the context menu handler:
 
 The FileContextMenuExt.h/cpp files define a context menu handler. The 
@@ -179,7 +168,7 @@ has been registered.
             UINT *pwReserved, LPSTR pszName, UINT cchMax);
     };
 	
-  1. Implementing IShellExtInit
+  ### 1. Implementing IShellExtInit
 
   After the context menu extension COM object is instantiated, the 
   IShellExtInit::Initialize method is called. IShellExtInit::Initialize 
@@ -195,7 +184,7 @@ has been registered.
   than one file or no file are selected, the method returns E_FAIL to not use 
   the context menu extension.
 
-  2. Implementing IContextMenu
+  ### 2. Implementing IContextMenu
 
   After IShellExtInit::Initialize returns S_OK, the 
   IContextMenu::QueryContextMenu method is called to obtain the menu item or 
@@ -243,20 +232,9 @@ For file classes, the handler is registered under the following subkey.
 
     HKEY_CLASSES_ROOT\<File Type>\shellex\ContextMenuHandlers
 
-The registration of the context menu handler is implemented in the 
-DllRegisterServer function of dllmain.cpp. DllRegisterServer first calls the 
-RegisterInprocServer function in Reg.h/cpp to register the COM component. 
-Next, it calls RegisterShellExtContextMenuHandler to associate the handler 
-with a certain file type. If the file type starts with '.', try to read the 
-default value of the HKCR\<File Type> key which may contain the Program ID to 
-which the file type is linked. If the default value is not empty, use the 
-Program ID as the file type to proceed the registration. 
+The registration of the context menu handler is implemented in the DllRegisterServer function of dllmain.cpp. DllRegisterServer first calls the RegisterInprocServer function in Reg.h/cpp to register the COM component. Next, it calls RegisterShellExtContextMenuHandler to associate the handler with a certain file type. If the file type starts with '.', try to read the default value of the HKCR\<File Type> key which may contain the Program ID to which the file type is linked. If the default value is not empty, use the Program ID as the file type to proceed the registration. 
 
-For example, this code sample associates the handler with '.cpp' files. 
-HKCR\.cpp has the default value 'VisualStudio.cpp.10.0' by default when 
-Visual Studio 2010 is installed, so we proceed to register the handler under 
-HKCR\VisualStudio.cpp.10.0\ instead of under HKCR\.cpp. The following keys 
-and values are added in the registration process of the sample handler. 
+For example, this code sample associates the handler with '.cpp' files. HKCR\.cpp has the default value 'VisualStudio.cpp.10.0' by default when Visual Studio 2010 is installed, so we proceed to register the handler under HKCR\VisualStudio.cpp.10.0\ instead of under HKCR\.cpp. The following keys and values are added in the registration process of the sample handler. 
 
     HKCR
     {
@@ -285,35 +263,33 @@ and values are added in the registration process of the sample handler.
         }
     }
 
-The unregistration is implemented in the DllUnregisterServer function of 
-dllmain.cpp. It removes the HKCR\CLSID\{<CLSID>} key and the {<CLSID>} key 
-under HKCR\<File Type>\shellex\ContextMenuHandlers.
+The unregistration is implemented in the DllUnregisterServer function of dllmain.cpp. It removes the HKCR\CLSID\{<CLSID>} key and the {<CLSID>} key under HKCR\<File Type>\shellex\ContextMenuHandlers.
 
 
-/////////////////////////////////////////////////////////////////////////////
-References:
+/////////////////////////////////////////////////////////////////////////////    
+### References:
 
-MSDN: Initializing Shell Extensions
+MSDN: Initializing Shell Extensions    
 http://msdn.microsoft.com/en-us/library/cc144105.aspx
 
-MSDN: Creating Context Menu Handlers
+MSDN: Creating Context Menu Handlers    
 http://msdn.microsoft.com/en-us/library/bb776881.aspx
 
-MSDN: Implementing the Context Menu COM Object
+MSDN: Implementing the Context Menu COM Object    
 http://msdn.microsoft.com/en-us/library/ms677106.aspx
 
-MSDN: Extending Shortcut Menus
+MSDN: Extending Shortcut Menus    
 http://msdn.microsoft.com/en-us/library/cc144101.aspx
 
-MSDN: Choosing a Static or Dynamic Shortcut Menu Method
+MSDN: Choosing a Static or Dynamic Shortcut Menu Method    
 http://msdn.microsoft.com/en-us/library/dd758091.aspx
 
-The Complete Idiot's Guide to Writing Shell Extensions
+The Complete Idiot's Guide to Writing Shell Extensions    
 http://www.codeproject.com/KB/shell/shellextguide1.aspx
 http://www.codeproject.com/KB/shell/shellextguide2.aspx
 http://www.codeproject.com/KB/shell/shellextguide7.aspx
 
-How to Use Submenus in a Context Menu Shell Extension
+How to Use Submenus in a Context Menu Shell Extension    
 http://www.codeproject.com/KB/shell/ctxextsubmenu.aspx
 
 
