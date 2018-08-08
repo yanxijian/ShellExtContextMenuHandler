@@ -285,8 +285,8 @@ MSDN: Choosing a Static or Dynamic Shortcut Menu Method
 http://msdn.microsoft.com/en-us/library/dd758091.aspx
 
 The Complete Idiot's Guide to Writing Shell Extensions    
-http://www.codeproject.com/KB/shell/shellextguide1.aspx
-http://www.codeproject.com/KB/shell/shellextguide2.aspx
+http://www.codeproject.com/KB/shell/shellextguide1.aspx    
+http://www.codeproject.com/KB/shell/shellextguide2.aspx    
 http://www.codeproject.com/KB/shell/shellextguide7.aspx
 
 How to Use Submenus in a Context Menu Shell Extension    
