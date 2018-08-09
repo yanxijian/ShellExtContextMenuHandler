@@ -177,6 +177,7 @@ IFACEMETHODIMP FileContextMenuExt::Initialize(
 			if (dot && 0 != _wcsicmp(dot, L_Associated_Type))
 			{
 				hr = E_INVALIDARG;
+				break;
 			}
 		}
 	}
