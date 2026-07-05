@@ -366,11 +366,24 @@ std::vector<MenuItemDef> GetBuiltinMenuItems()
 
 bool LoadMenuConfig(const std::wstring& configPath, std::vector<MenuItemDef>& items)
 {
+    static std::wstring cachedConfigPath;
+    static std::vector<MenuItemDef> cachedItems;
+    static bool hasCachedItems = false;
+
+    if (hasCachedItems && cachedConfigPath == configPath)
+    {
+        items = cachedItems;
+        return true;
+    }
+
     std::wstring json;
     if (!ReadUtf8File(configPath, json))
     {
         ShellLog(L"Config not found, using built-in menu: %s", configPath.c_str());
         items = GetBuiltinMenuItems();
+        cachedItems = items;
+        cachedConfigPath = configPath;
+        hasCachedItems = true;
         return false;
     }
 
@@ -378,9 +391,15 @@ bool LoadMenuConfig(const std::wstring& configPath, std::vector<MenuItemDef>& it
     {
         ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
         items = GetBuiltinMenuItems();
+        cachedItems = items;
+        cachedConfigPath = configPath;
+        hasCachedItems = true;
         return false;
     }
 
     ShellLog(L"Loaded %u menu item(s) from %s", static_cast<UINT>(items.size()), configPath.c_str());
+    cachedItems = items;
+    cachedConfigPath = configPath;
+    hasCachedItems = true;
     return true;
 }

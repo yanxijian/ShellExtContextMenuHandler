@@ -19,10 +19,10 @@ namespace
             }
         };
 
-        if (!context.selectedPaths.empty())
+        if (!context.selected.empty())
         {
-            replaceAll(L"%1", QuotePath(context.selectedPaths.front()));
-            replaceAll(L"%D", QuotePath(GetParentDirectory(context.selectedPaths.front())));
+            replaceAll(L"%1", QuotePath(context.selected.front().path));
+            replaceAll(L"%D", QuotePath(GetParentDirectory(context.selected.front().path)));
         }
         else if (!context.folderPath.empty())
         {
@@ -30,7 +30,7 @@ namespace
             replaceAll(L"%D", QuotePath(context.folderPath));
         }
 
-        replaceAll(L"%*", JoinQuotedPaths(context.selectedPaths));
+        replaceAll(L"%*", JoinQuotedPaths(context.GetSelectedPaths()));
 
         return result;
     }

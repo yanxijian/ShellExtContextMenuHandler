@@ -1,9 +1,9 @@
 #include "MenuProvider.h"
-#include "Filter.h"
+#include "ContextBuilder.h"
+#include "GateRegistry.h"
 #include "MenuActionHandler.h"
 #include "MenuConfig.h"
 #include "ShellLog.h"
-#include <ShlObj.h>
 #include <Shlwapi.h>
 #include <strsafe.h>
 
@@ -11,7 +11,8 @@
 
 MenuProvider::MenuProvider(HINSTANCE moduleInstance)
     : m_moduleInstance(moduleInstance),
-    m_configLoaded(false)
+    m_configLoaded(false),
+    m_initialized(false)
 {
     wchar_t modulePath[MAX_PATH] = {};
     if (GetModuleFileNameW(moduleInstance, modulePath, ARRAYSIZE(modulePath)) != 0)
@@ -45,144 +46,113 @@ void MenuProvider::EnsureConfigLoaded()
     m_configLoaded = true;
 }
 
-void MenuProvider::ResetContext(MenuContext& context)
+bool MenuProvider::EvaluateItemGate(const MenuContext& context, const MenuItemDef& item) const
 {
-    context.selectedPaths.clear();
-    context.folderPath.clear();
-    context.selectionCount = 0;
-    context.hasFiles = false;
-    context.hasFolders = false;
+    IMenuItemGate* gate = GateRegistry::Instance().DefaultItemGate();
+    return gate != nullptr && gate->ShouldShow(context, item);
 }
 
-bool MenuProvider::TryPopulateFolderPath(LPCITEMIDLIST pidlFolder, MenuContext& context)
+MenuItemState MenuProvider::EvaluatePresentationGate(
+    const MenuContext& context,
+    const MenuItemDef& item) const
 {
-    if (pidlFolder == nullptr)
+    IMenuItemPresentationGate* gate = GateRegistry::Instance().DefaultPresentationGate();
+    if (gate == nullptr)
     {
-        return false;
+        return MenuItemState::Enabled;
     }
 
-    wchar_t folderPath[MAX_PATH] = {};
-    if (!SHGetPathFromIDListW(pidlFolder, folderPath))
-    {
-        return false;
-    }
-
-    context.folderPath = folderPath;
-    return true;
+    return gate->Evaluate(context, item);
 }
 
-bool MenuProvider::TryPopulateFromDataObject(LPDATAOBJECT dataObject, MenuContext& context)
+HRESULT MenuProvider::Initialize(
+    LPCITEMIDLIST pidlFolder,
+    LPDATAOBJECT dataObject,
+    HKEY hKeyProgID)
 {
-    if (dataObject == nullptr)
+    m_candidateItems.clear();
+    m_insertedItems.clear();
+    m_initialized = false;
+
+    if (!BuildMenuContext(pidlFolder, dataObject, hKeyProgID, m_context))
     {
-        return false;
+        return E_FAIL;
     }
 
-    FORMATETC format = { CF_HDROP, nullptr, DVASPECT_CONTENT, -1, TYMED_HGLOBAL };
-    STGMEDIUM storage = {};
-
-    if (!SUCCEEDED(dataObject->GetData(&format, &storage)))
+    IExtensionGate* extensionGate = GateRegistry::Instance().DefaultExtensionGate();
+    if (extensionGate == nullptr || !extensionGate->ShouldActivate(m_context))
     {
-        return false;
+        ShellLog(L"Extension gate rejected current context.");
+        return E_FAIL;
     }
 
-    HDROP dropHandle = static_cast<HDROP>(GlobalLock(storage.hGlobal));
-    if (dropHandle == nullptr)
+    EnsureConfigLoaded();
+    for (const auto& item : m_allItems)
     {
-        ReleaseStgMedium(&storage);
-        return false;
+        if (EvaluateItemGate(m_context, item))
+        {
+            m_candidateItems.push_back(item);
+        }
     }
 
-    const UINT fileCount = DragQueryFileW(dropHandle, 0xFFFFFFFF, nullptr, 0);
-    for (UINT index = 0; index < fileCount; ++index)
+    if (m_candidateItems.empty())
     {
-        wchar_t selectedPath[MAX_PATH] = {};
-        if (DragQueryFileW(dropHandle, index, selectedPath, ARRAYSIZE(selectedPath)) == 0)
+        ShellLog(L"No candidate menu items for current selection.");
+        return E_FAIL;
+    }
+
+    m_initialized = true;
+    return S_OK;
+}
+
+void MenuProvider::BuildInsertedItems(std::vector<InsertedMenuItem>& insertedItems)
+{
+    insertedItems.clear();
+    if (!m_initialized)
+    {
+        return;
+    }
+
+    for (const auto& candidate : m_candidateItems)
+    {
+        const MenuItemState state = EvaluatePresentationGate(m_context, candidate);
+        if (state == MenuItemState::Hidden)
         {
             continue;
         }
 
-        context.selectedPaths.push_back(selectedPath);
-        const DWORD attributes = GetFileAttributesW(selectedPath);
-        if (attributes != INVALID_FILE_ATTRIBUTES
-            && (attributes & FILE_ATTRIBUTE_DIRECTORY) != 0)
-        {
-            context.hasFolders = true;
-        }
-        else
-        {
-            context.hasFiles = true;
-        }
+        InsertedMenuItem inserted;
+        inserted.item = candidate;
+        inserted.state = state;
+        insertedItems.push_back(inserted);
     }
 
-    GlobalUnlock(storage.hGlobal);
-    ReleaseStgMedium(&storage);
-
-    context.selectionCount = static_cast<UINT>(context.selectedPaths.size());
-    return context.selectionCount > 0;
+    m_insertedItems = insertedItems;
 }
 
-HRESULT MenuProvider::BuildContext(
-    LPCITEMIDLIST pidlFolder,
-    LPDATAOBJECT dataObject,
-    MenuContext& context,
-    std::vector<MenuItemDef>& visibleItems)
+bool MenuProvider::TryGetInsertedItemByCommandOffset(UINT commandOffset, const InsertedMenuItem** item) const
 {
-    EnsureConfigLoaded();
-    ResetContext(context);
-    visibleItems.clear();
-
-    TryPopulateFolderPath(pidlFolder, context);
-    TryPopulateFromDataObject(dataObject, context);
-
-    if (context.selectionCount == 0 && context.folderPath.empty())
-    {
-        return E_FAIL;
-    }
-
-    for (const auto& item : m_allItems)
-    {
-        if (MenuItemMatchesContext(item, context))
-        {
-            visibleItems.push_back(item);
-        }
-    }
-
-    m_context = context;
-    m_visibleItems = visibleItems;
-
-    if (visibleItems.empty())
-    {
-        ShellLog(L"No visible menu items for current selection.");
-        return E_FAIL;
-    }
-
-    return S_OK;
-}
-
-bool MenuProvider::TryGetItemByCommandOffset(UINT commandOffset, const MenuItemDef** item) const
-{
-    if (commandOffset >= m_visibleItems.size())
+    if (commandOffset >= m_insertedItems.size())
     {
         return false;
     }
 
-    *item = &m_visibleItems[commandOffset];
+    *item = &m_insertedItems[commandOffset];
     return true;
 }
 
-bool MenuProvider::TryGetItemByVerb(PCWSTR verb, const MenuItemDef** item) const
+bool MenuProvider::TryGetInsertedItemByVerb(PCWSTR verb, const InsertedMenuItem** item) const
 {
     if (verb == nullptr)
     {
         return false;
     }
 
-    for (const auto& visibleItem : m_visibleItems)
+    for (const auto& insertedItem : m_insertedItems)
     {
-        if (_wcsicmp(visibleItem.verb.c_str(), verb) == 0)
+        if (_wcsicmp(insertedItem.item.verb.c_str(), verb) == 0)
         {
-            *item = &visibleItem;
+            *item = &insertedItem;
             return true;
         }
     }
@@ -190,7 +160,13 @@ bool MenuProvider::TryGetItemByVerb(PCWSTR verb, const MenuItemDef** item) const
     return false;
 }
 
-void MenuProvider::ExecuteItem(const MenuItemDef& item, HWND hwnd) const
+void MenuProvider::ExecuteItem(const InsertedMenuItem& item, HWND hwnd) const
 {
-    ExecuteMenuAction(item.action, m_context, hwnd);
+    if (item.state == MenuItemState::Disabled)
+    {
+        ShellLog(L"Skipped disabled menu item: %s", item.item.id.c_str());
+        return;
+    }
+
+    ExecuteMenuAction(item.item.action, m_context, hwnd);
 }

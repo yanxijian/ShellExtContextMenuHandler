@@ -16,7 +16,9 @@ set(SHELL_EXT_SOURCES
     src/extension/dllmain.cpp
     src/extension/ClassFactory.cpp
     src/extension/FileContextMenuExt.cpp
-    src/menu/Filter.cpp
+    src/context/ContextBuilder.cpp
+    src/gates/GateRegistry.cpp
+    src/gates/JsonFilterGate.cpp
     src/menu/MenuActionHandler.cpp
     src/menu/MenuConfig.cpp
     src/menu/MenuProvider.cpp
@@ -37,6 +39,8 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/shell_ext
     ${CMAKE_CURRENT_SOURCE_DIR}/src/extension
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/context
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/gates
     ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/registry
     ${CMAKE_CURRENT_SOURCE_DIR}/src/resources
@@ -49,6 +53,8 @@ target_compile_definitions(${TARGET_NAME} PRIVATE
     _WINDOWS
     _USRDLL
     CPPSHELLEXTCONTEXTMENUHANDLER_EXPORTS
+    _WIN32_WINNT=0x0601
+    WINVER=0x0601
 )
 
 target_sources(${TARGET_NAME} PRIVATE

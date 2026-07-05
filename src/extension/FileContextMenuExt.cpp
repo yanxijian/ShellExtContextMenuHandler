@@ -60,9 +60,7 @@ IFACEMETHODIMP_(ULONG) FileContextMenuExt::Release()
 IFACEMETHODIMP FileContextMenuExt::Initialize(
     LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDataObj, HKEY hKeyProgID)
 {
-    UNREFERENCED_PARAMETER(hKeyProgID);
-    MenuContext context;
-    return m_menuProvider.BuildContext(pidlFolder, pDataObj, context, m_visibleItems);
+    return m_menuProvider.Initialize(pidlFolder, pDataObj, hKeyProgID);
 }
 
 IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
@@ -73,22 +71,28 @@ IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
         return MAKE_HRESULT(SEVERITY_SUCCESS, 0, USHORT(0));
     }
 
+    m_menuProvider.BuildInsertedItems(m_insertedItems);
+    if (m_insertedItems.empty())
+    {
+        return MAKE_HRESULT(SEVERITY_SUCCESS, 0, USHORT(0));
+    }
+
     UINT menuOffset = 0;
     UINT insertIndex = indexMenu;
-    for (size_t i = 0; i < m_visibleItems.size(); ++i)
+    for (size_t i = 0; i < m_insertedItems.size(); ++i)
     {
         if (idCmdFirst + menuOffset > idCmdLast)
         {
             break;
         }
 
-        const MenuItemDef& item = m_visibleItems[i];
+        const InsertedMenuItem& inserted = m_insertedItems[i];
         MENUITEMINFOW menuInfo = { sizeof(menuInfo) };
         menuInfo.fMask = MIIM_BITMAP | MIIM_STRING | MIIM_FTYPE | MIIM_ID | MIIM_STATE;
         menuInfo.wID = idCmdFirst + menuOffset;
         menuInfo.fType = MFT_STRING;
-        menuInfo.dwTypeData = const_cast<PWSTR>(item.label.c_str());
-        menuInfo.fState = MFS_ENABLED;
+        menuInfo.dwTypeData = const_cast<PWSTR>(inserted.item.label.c_str());
+        menuInfo.fState = inserted.state == MenuItemState::Disabled ? MFS_DISABLED : MFS_ENABLED;
         menuInfo.hbmpItem = static_cast<HBITMAP>(m_hMenuBmp);
 
         if (!InsertMenuItemW(hMenu, insertIndex, TRUE, &menuInfo))
@@ -99,7 +103,7 @@ IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
         ++insertIndex;
         ++menuOffset;
 
-        if (item.separatorAfter)
+        if (inserted.item.separatorAfter)
         {
             MENUITEMINFOW separator = { sizeof(separator) };
             separator.fMask = MIIM_TYPE;
@@ -129,10 +133,10 @@ IFACEMETHODIMP FileContextMenuExt::InvokeCommand(LPCMINVOKECOMMANDINFO pici)
         isUnicode = TRUE;
     }
 
-    const MenuItemDef* item = nullptr;
+    const InsertedMenuItem* item = nullptr;
     if (!isUnicode && HIWORD(pici->lpVerb))
     {
-        if (!m_menuProvider.TryGetItemByVerb(
+        if (!m_menuProvider.TryGetInsertedItemByVerb(
             reinterpret_cast<PCWSTR>(pici->lpVerb), &item))
         {
             return E_FAIL;
@@ -140,7 +144,7 @@ IFACEMETHODIMP FileContextMenuExt::InvokeCommand(LPCMINVOKECOMMANDINFO pici)
     }
     else if (isUnicode && HIWORD(((CMINVOKECOMMANDINFOEX*)pici)->lpVerbW))
     {
-        if (!m_menuProvider.TryGetItemByVerb(
+        if (!m_menuProvider.TryGetInsertedItemByVerb(
             ((CMINVOKECOMMANDINFOEX*)pici)->lpVerbW, &item))
         {
             return E_FAIL;
@@ -148,7 +152,7 @@ IFACEMETHODIMP FileContextMenuExt::InvokeCommand(LPCMINVOKECOMMANDINFO pici)
     }
     else
     {
-        if (!m_menuProvider.TryGetItemByCommandOffset(LOWORD(pici->lpVerb), &item))
+        if (!m_menuProvider.TryGetInsertedItemByCommandOffset(LOWORD(pici->lpVerb), &item))
         {
             return E_FAIL;
         }
@@ -163,8 +167,8 @@ IFACEMETHODIMP FileContextMenuExt::GetCommandString(UINT_PTR idCommand,
 {
     UNREFERENCED_PARAMETER(pwReserved);
 
-    const MenuItemDef* item = nullptr;
-    if (!m_menuProvider.TryGetItemByCommandOffset(static_cast<UINT>(idCommand), &item))
+    const InsertedMenuItem* item = nullptr;
+    if (!m_menuProvider.TryGetInsertedItemByCommandOffset(static_cast<UINT>(idCommand), &item))
     {
         return E_INVALIDARG;
     }
@@ -172,10 +176,10 @@ IFACEMETHODIMP FileContextMenuExt::GetCommandString(UINT_PTR idCommand,
     switch (uFlags)
     {
     case GCS_HELPTEXTW:
-        return StringCchCopy(reinterpret_cast<PWSTR>(pszName), cchMax, item->helpText.c_str());
+        return StringCchCopy(reinterpret_cast<PWSTR>(pszName), cchMax, item->item.helpText.c_str());
 
     case GCS_VERBW:
-        return StringCchCopy(reinterpret_cast<PWSTR>(pszName), cchMax, item->canonicalName.c_str());
+        return StringCchCopy(reinterpret_cast<PWSTR>(pszName), cchMax, item->item.canonicalName.c_str());
 
     default:
         return S_OK;

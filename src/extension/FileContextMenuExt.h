@@ -3,8 +3,6 @@
 #include <windows.h>
 #include <shlobj.h>
 #include <vector>
-#include "MenuContext.h"
-#include "MenuItem.h"
 #include "MenuProvider.h"
 
 class FileContextMenuExt : public IShellExtInit, public IContextMenu
@@ -27,6 +25,6 @@ protected:
 private:
     long m_cRef;
     MenuProvider m_menuProvider;
-    std::vector<MenuItemDef> m_visibleItems;
+    std::vector<InsertedMenuItem> m_insertedItems;
     HANDLE m_hMenuBmp;
 };
