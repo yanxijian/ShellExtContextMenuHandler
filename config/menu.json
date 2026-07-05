@@ -6,6 +6,7 @@
       "verb": "cppdisplay",
       "helpText": "Display File Name (C++)",
       "canonicalName": "CppDisplayFileName",
+      "icon": "icons/cpp.svg",
       "separatorAfter": true,
       "extensions": [".cpp"],
       "minSelection": 1,

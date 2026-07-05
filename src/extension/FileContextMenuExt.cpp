@@ -1,6 +1,6 @@
 #include "FileContextMenuExt.h"
 #include "DpiProvider.h"
-#include "resource.h"
+#include "IconProviderRegistry.h"
 #include <strsafe.h>
 #include <Shlwapi.h>
 
@@ -11,42 +11,34 @@ extern long g_cDllRef;
 
 FileContextMenuExt::FileContextMenuExt(void)
     : m_cRef(1),
-    m_menuProvider(g_hInst),
-    m_hMenuBmp(nullptr),
-    m_cachedIconDpi(0)
+    m_menuProvider(g_hInst)
 {
     InterlockedIncrement(&g_cDllRef);
 }
 
 FileContextMenuExt::~FileContextMenuExt(void)
 {
-    if (m_hMenuBmp)
-    {
-        DeleteObject(m_hMenuBmp);
-        m_hMenuBmp = nullptr;
-    }
-
+    ReleaseItemBitmaps();
     InterlockedDecrement(&g_cDllRef);
 }
 
-void FileContextMenuExt::EnsureMenuBitmap(UINT dpi)
+void FileContextMenuExt::ReleaseItemBitmaps()
 {
-    if (m_hMenuBmp != nullptr && m_cachedIconDpi == dpi)
+    for (HBITMAP bitmap : m_itemBitmaps)
     {
-        return;
+        if (bitmap != nullptr)
+        {
+            DeleteObject(bitmap);
+        }
     }
 
-    if (m_hMenuBmp != nullptr)
-    {
-        DeleteObject(m_hMenuBmp);
-        m_hMenuBmp = nullptr;
-    }
+    m_itemBitmaps.clear();
+}
 
-    m_hMenuBmp = DpiProvider::LoadMenuBitmapScaled(
-        g_hInst,
-        MAKEINTRESOURCEW(IDB_OK),
-        dpi);
-    m_cachedIconDpi = dpi;
+HBITMAP FileContextMenuExt::LoadItemBitmap(const std::wstring& iconSpec, UINT dpi)
+{
+    HBITMAP bitmap = IconProviderRegistry::Instance().LoadMenuItemIcon(iconSpec, dpi, g_hInst);
+    return bitmap;
 }
 
 IFACEMETHODIMP FileContextMenuExt::QueryInterface(REFIID riid, void **ppv)
@@ -91,13 +83,15 @@ IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
     }
 
     const UINT menuDpi = DpiProvider::GetDpiAtCursor();
-    EnsureMenuBitmap(menuDpi);
+    ReleaseItemBitmaps();
 
     m_menuProvider.BuildInsertedItems(m_insertedItems);
     if (m_insertedItems.empty())
     {
         return MAKE_HRESULT(SEVERITY_SUCCESS, 0, USHORT(0));
     }
+
+    m_itemBitmaps.reserve(m_insertedItems.size());
 
     UINT menuOffset = 0;
     UINT insertIndex = indexMenu;
@@ -109,13 +103,16 @@ IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
         }
 
         const InsertedMenuItem& inserted = m_insertedItems[i];
+        HBITMAP itemBitmap = LoadItemBitmap(inserted.item.icon, menuDpi);
+        m_itemBitmaps.push_back(itemBitmap);
+
         MENUITEMINFOW menuInfo = { sizeof(menuInfo) };
         menuInfo.fMask = MIIM_BITMAP | MIIM_STRING | MIIM_FTYPE | MIIM_ID | MIIM_STATE;
         menuInfo.wID = idCmdFirst + menuOffset;
         menuInfo.fType = MFT_STRING;
         menuInfo.dwTypeData = const_cast<PWSTR>(inserted.item.label.c_str());
         menuInfo.fState = inserted.state == MenuItemState::Disabled ? MFS_DISABLED : MFS_ENABLED;
-        menuInfo.hbmpItem = static_cast<HBITMAP>(m_hMenuBmp);
+        menuInfo.hbmpItem = itemBitmap;
 
         if (!InsertMenuItemW(hMenu, insertIndex, TRUE, &menuInfo))
         {

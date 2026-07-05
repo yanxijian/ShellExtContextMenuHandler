@@ -249,6 +249,7 @@ namespace
 
         ExtractStringValue(objectBody, L"helpText", item.helpText);
         ExtractStringValue(objectBody, L"canonicalName", item.canonicalName);
+        ExtractStringValue(objectBody, L"icon", item.icon);
         ExtractBoolValue(objectBody, L"separatorAfter", item.separatorAfter);
 
         ExtractStringArray(objectBody, L"extensions", item.filter.extensions);

@@ -43,12 +43,23 @@ if ([string]::IsNullOrWhiteSpace($DllPath)) {
 
 $DllPath = (Resolve-Path $DllPath).Path
 $dllDir = Split-Path -Parent $DllPath
-$configSource = Join-Path (Split-Path -Parent $PSScriptRoot) "config\menu.json"
+$repoRoot = Split-Path -Parent $PSScriptRoot
+$configSource = Join-Path $repoRoot "config\menu.json"
 $configTarget = Join-Path $dllDir "menu.json"
 
 if (Test-Path $configSource) {
     Copy-Item -Path $configSource -Destination $configTarget -Force
     Write-Host "Copied config to $configTarget"
+}
+
+$iconsSource = Join-Path $repoRoot "config\icons"
+$iconsTarget = Join-Path $dllDir "icons"
+if (Test-Path $iconsSource) {
+    if (-not (Test-Path $iconsTarget)) {
+        New-Item -ItemType Directory -Path $iconsTarget | Out-Null
+    }
+    Copy-Item -Path (Join-Path $iconsSource "*") -Destination $iconsTarget -Recurse -Force
+    Write-Host "Copied icons to $iconsTarget"
 }
 
 $regsvr32 = Join-Path $env:Windir "System32\regsvr32.exe"

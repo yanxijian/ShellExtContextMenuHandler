@@ -36,6 +36,7 @@ struct MenuItemDef
     std::wstring verb;
     std::wstring helpText;
     std::wstring canonicalName;
+    std::wstring icon;
     bool separatorAfter = false;
     MenuFilter filter;
     MenuAction action;

@@ -25,6 +25,11 @@ set(SHELL_EXT_SOURCES
     src/actions/LaunchExecutor.cpp
     src/platform/OsVersion.cpp
     src/platform/DpiProvider.cpp
+    src/icons/IconBitmapUtils.cpp
+    src/icons/IconProviderRegistry.cpp
+    src/icons/SvgIconProvider.cpp
+    src/icons/BitmapFileIconProvider.cpp
+    src/icons/DefaultResourceIconProvider.cpp
     src/menu/MenuActionHandler.cpp
     src/menu/MenuConfig.cpp
     src/menu/MenuProvider.cpp
@@ -44,11 +49,13 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/shell_ext
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nanosvg
     ${CMAKE_CURRENT_SOURCE_DIR}/src/extension
     ${CMAKE_CURRENT_SOURCE_DIR}/src/context
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gates
     ${CMAKE_CURRENT_SOURCE_DIR}/src/actions
     ${CMAKE_CURRENT_SOURCE_DIR}/src/platform
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/icons
     ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/registry
     ${CMAKE_CURRENT_SOURCE_DIR}/src/resources
@@ -71,6 +78,7 @@ target_sources(${TARGET_NAME} PRIVATE
 
 if(MSVC)
     target_compile_options(${TARGET_NAME} PRIVATE /W3)
+    target_compile_options(${TARGET_NAME} PRIVATE /wd4244 /wd4267 /wd4996)
     target_link_options(${TARGET_NAME} PRIVATE
         "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/resources/GlobalExportFunctions.def"
     )
@@ -85,9 +93,18 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
     COMMENT "Copying menu.json to output directory"
 )
 
+add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/icons"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/icons"
+        "$<TARGET_FILE_DIR:${TARGET_NAME}>/icons"
+    COMMENT "Copying icon assets to output directory"
+)
+
 install(TARGETS ${TARGET_NAME}
     RUNTIME DESTINATION .
     LIBRARY DESTINATION .
 )
 
 install(FILES config/menu.json DESTINATION .)
+install(DIRECTORY config/icons DESTINATION .)
