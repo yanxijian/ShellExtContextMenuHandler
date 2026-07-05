@@ -4,20 +4,20 @@
 
 **Design target:** Windows 7 SP1 and later (x86 / x64 Explorer)
 
-This document is the corrected architecture baseline. Win7 support is a **design and validation goal**, not a claim that every build configuration has been verified on Win7 hardware.
+This document is the architecture baseline. Win7 support is a **design and validation goal**; complete the manual Win7 SP1 x64 checklist below before claiming release support.
 
 ## Goals
 
 - Fork-friendly advanced demo for Shell context menu extensions
 - `IContextMenu` as the only required integration path (Win7 through Win11)
 - Pluggable gates for layered visibility checks
-- JSON for simple menu rules, C++ for complex logic
-- Pluggable action executors (P1+)
-- SVG rasterized icons with DPI fallbacks (P3+)
+- JSON for menu rules and gate/executor chains; C++ for complex logic
+- Pluggable action executor chain (`ExecutorRegistry`)
+- SVG rasterized icons with DPI-aware fallbacks (`IconProviderRegistry`)
 
 ## Non-goals
 
-- Win11 compact menu / `IExplorerCommand` as the primary path
+- Win11 compact menu / `IExplorerCommand` as the primary path (see roadmap appendix)
 - Expressing all business rules in JSON alone
 - Heavy I/O inside `Initialize` or `QueryContextMenu`
 
@@ -26,23 +26,24 @@ This document is the corrected architecture baseline. Win7 support is a **design
 ```
 Initialize
   ContextBuilder  (paths, attributes, progId — parsed once)
-    -> Gate 1 (ExtensionGate)
-    -> Gate 2 (ItemGate per menu item) -> candidateItems
+    -> Gate 1 (global extensionGates chain)
+    -> Gate 2 (per-item itemGates chain) -> candidateItems
+      (optional: per-item extensionGates extra check)
     -> no candidates => E_FAIL
     -> otherwise     => S_OK
 
 QueryContextMenu
-  Gate 3 (PresentationGate per candidate) -> insertedItems
+  Gate 3 (per-item presentationGates chain) -> insertedItems
     -> Hidden   : not inserted
     -> Disabled : inserted with MFS_DISABLED
     -> Enabled  : inserted normally
-  Assign cmd IDs only to insertedItems (non-Hidden)
-  Load icons (P3+)
+  Assign cmd IDs only to insertedItems
+  Load icons (SVG / BMP / default resource, DPI-scaled)
 
 InvokeCommand
   Map offset/verb to insertedItems
   -> skip execution when Disabled
-  -> Action executor chain (P1+)
+  -> executors chain (JSON order or defaults)
 ```
 
 ## Gate semantics
@@ -53,42 +54,50 @@ InvokeCommand
 | Gate 2 | `Initialize` | Item enters `candidateItems` | Item omitted |
 | Gate 3 | `QueryContextMenu` | `Enabled` / `Disabled` / `Hidden` | `Hidden` omits item |
 
-**Important:** Gate 1 may pass while Gate 2 yields zero items. In that case `Initialize` still returns `E_FAIL` (same as today).
+**Chain evaluation:**
 
-Gate 1 should be very fast (no disk scans, no network). JSON config is cached at process scope after first load.
+- Extension / Item: AND — any failure rejects
+- Presentation: `Hidden` > `Disabled` > `Enabled`
+- Name `custom:MyGate` strips the `custom:` prefix; `demo:*` keeps the full registered name
+
+Gate 1 should be very fast. JSON config is cached after first load.
 
 ## MenuContext
 
-Built once per right-click in `ContextBuilder`. Gates read `MenuContext` only; they must not call `GetFileAttributes` again for items already parsed.
+Built once per right-click in `ContextBuilder`. Gates read `MenuContext` only.
 
-Suggested detection dimensions (documentation / fork examples, not all implemented in the demo):
+Built-in demo gates:
 
-- Extension, ProgID, file/folder name patterns
-- Path prefix, drive, UNC
-- Selection count, mixed file+folder selection
-- Attributes: directory, readonly, hidden, reparse point
-- Folder background (no selection, `folderPath` set)
-
-## Command ID mapping
-
-- `idCmdFirst + offset` maps to `insertedItems[offset]`
-- Separators do not consume command IDs
-- `GetCommandString` and `InvokeCommand` use the same `insertedItems` list
-- Verb lookup is also supported via `GetCommandString` / `InvokeCommand`
+| Name | Type | Behavior |
+|------|------|----------|
+| `demo:hideTemp` | Item | Hides item when path contains `\temp\` |
+| `demo:readOnlyDisable` | Presentation | Disabled on readonly files |
 
 ## Configuration model
 
-`config/menu.json` — declarative labels, filters, actions.
-
-C++ gate / executor registration — `GateRegistry` (and `ExecutorRegistry` in P1).
-
-Future JSON field:
+`config/menu.json` supports root-level and per-item chain overrides:
 
 ```json
-"gates": ["jsonFilter", "custom:MyGate"]
+{
+  "extensionGates": ["extensionPass"],
+  "itemGates": ["jsonFilter", "demo:hideTemp"],
+  "presentationGates": ["presentationPass", "demo:readOnlyDisable"],
+  "executors": ["demo:actionLog", "messageBox", "launch"],
+  "menuItems": [ { "id": "example", "verb": "example", "icon": "icons/example.svg" } ]
+}
 ```
 
-P0 registers default gates in code: `extensionPass`, `jsonFilter`, `presentationPass`.
+| Field | Role |
+|-------|------|
+| `extensionGates` | Gate 1 chain; per-item array adds an extra check for that item |
+| `itemGates` | Gate 2 chain; `gates` is an alias |
+| `presentationGates` | Gate 3 chain |
+| `executors` | Action executor chain |
+| `icon` | Icon path relative to the DLL directory |
+
+Empty arrays fall back to defaults: `extensionPass` → `jsonFilter` → `presentationPass` → `messageBox` + `launch`.
+
+Register custom gates/executors in `GateRegistry` / `ExecutorRegistry`.
 
 ## Platform notes (Win7 SP1+)
 
@@ -96,10 +105,10 @@ P0 registers default gates in code: `extensionPass`, `jsonFilter`, `presentation
 |-------|----------|
 | Shell API | `IShellExtInit`, `IContextMenu` |
 | Build | `_WIN32_WINNT=0x0601`, `WINVER=0x0601` |
-| Newer APIs | Dynamic load after OS version check |
-| DPI / icons | System DPI on Win7; per-monitor on Win8.1+ (P2/P3) |
-| Registration | `*` handler + runtime gates; match DLL bitness to Explorer |
-| Toolchain | VS 2026 output must be validated on Win7 VM before claiming support |
+| Newer APIs | Dynamic load after `OsVersion` check |
+| DPI / icons | System DPI on Win7; per-monitor on Win8.1+ |
+| Registration | `*` handler + runtime gates; match DLL bitness |
+| Toolchain | Validate VS output on Win7 VM before claiming support |
 
 ## Source layout
 
@@ -107,27 +116,62 @@ P0 registers default gates in code: `extensionPass`, `jsonFilter`, `presentation
 src/
   extension/     COM shell entry (thin)
   context/       MenuContext, ContextBuilder
-  gates/         Gate interfaces, registry, JsonFilterGate
-  menu/          MenuProvider, MenuItem, config, actions
+  gates/         Gate interfaces, registry, JsonFilterGate, demo gates
+  actions/       IActionExecutor, ExecutorRegistry, MessageBox/Launch
+  platform/      OsVersion, DpiProvider
+  icons/         SVG/BMP providers, DPI rasterization
+  menu/          MenuProvider, MenuConfig, MenuGateChains
   registry/      COM registration helpers
   resources/     RC, DEF, bitmaps
+config/
+  menu.json
+  icons/
+tools/
+  validate_menu_json.py
+  register.ps1
 ```
 
 ## Roadmap
 
-| Phase | Scope |
-|-------|--------|
-| **P0** | ContextBuilder, Gate 1/2/3 skeleton, JsonFilterGate, candidate/inserted split, Win7 CMake macros |
-| **P1** | `IActionExecutor` chain |
-| **P2** | `platform/DpiProvider`, `OsVersion` |
-| **P3** | SVG icon provider |
-| **P4** | Sample custom gates/executors, JSON `gates` array |
-| **Appendix** | `IExplorerCommand` experiments (not Win7 baseline) |
+| Phase | Scope | Status |
+|-------|--------|--------|
+| **P0** | ContextBuilder, Gate 1/2/3, JsonFilterGate, candidate/inserted split | Done |
+| **P1** | `IActionExecutor` chain | Done |
+| **P2** | `platform/DpiProvider`, `OsVersion` | Done |
+| **P3** | SVG icon provider, per-item `icon` | Done |
+| **P4** | JSON gate/executor chains, demo extensions | Done |
+| **Quality** | CI build, menu.json validation, Win7 VM manual pass | In progress |
+| **Appendix** | `IExplorerCommand` experiments (not Win7 baseline) | Not started |
+
+## Validation checklist
+
+### Automated (CI / local)
+
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake --build build --config Release
+python tools/validate_menu_json.py
+```
+
+Workflow `.github/workflows/ci.yml` runs Release build and JSON validation on push/PR.
+
+### Manual (before release / fork)
+
+| Scenario | Expected |
+|----------|----------|
+| Right-click `.cpp` | Menu items appear; `[ShellExt]` logs in DebugView |
+| `.cpp` under `%TEMP%` | Items filtered by `demo:hideTemp` |
+| Readonly `.cpp` | Items shown disabled |
+| Folder background | `foldersOnly` items visible |
+| Multi-select / extensions | `jsonFilter` rules apply |
+| Invoke menu item | `demo:actionLog` log + messageBox/launch runs |
+| Win7 SP1 x64 VM | No crash; menu and actions work |
+| Win10 / Win11 x64 | Same; crisp icons at high DPI |
 
 ## Fork guide
 
 1. Change CLSID and names in `dllmain.cpp` / `include/shell_ext/common.h`
-2. Edit `config/menu.json` for most menu changes
+2. Edit `config/menu.json` (chains, icons, items)
 3. Add `src/gates/MyGate.cpp` and register in `GateRegistry`
-4. Add `src/actions/MyExecutor.cpp` (P1+) and register
-5. Test on Win7 SP1 x64 VM before release
+4. Add `src/actions/MyExecutor.cpp` and register in `ExecutorRegistry`
+5. Run automated validation; complete the manual checklist on Win7 SP1 x64 VM

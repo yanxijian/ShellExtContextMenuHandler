@@ -29,6 +29,7 @@ public:
 
 private:
     void EnsureConfigLoaded();
+    bool PassesExtensionGates(const MenuItemDef& item) const;
     const std::vector<std::wstring>& ResolveItemGates(const MenuItemDef& item) const;
     const std::vector<std::wstring>& ResolvePresentationGates(const MenuItemDef& item) const;
     const std::vector<std::wstring>& ResolveExecutors(const MenuItemDef& item) const;

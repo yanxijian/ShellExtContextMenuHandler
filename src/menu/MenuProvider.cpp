@@ -50,6 +50,16 @@ void MenuProvider::EnsureConfigLoaded()
     m_configLoaded = true;
 }
 
+bool MenuProvider::PassesExtensionGates(const MenuItemDef& item) const
+{
+    if (item.extensionGates.empty())
+    {
+        return true;
+    }
+
+    return GateRegistry::Instance().EvaluateExtensionChain(m_context, item.extensionGates);
+}
+
 const std::vector<std::wstring>& MenuProvider::ResolveItemGates(const MenuItemDef& item) const
 {
     return item.itemGates.empty() ? m_globalChains.itemGates : item.itemGates;
@@ -89,6 +99,11 @@ HRESULT MenuProvider::Initialize(
 
     for (const auto& item : m_allItems)
     {
+        if (!PassesExtensionGates(item))
+        {
+            continue;
+        }
+
         if (GateRegistry::Instance().EvaluateItemChain(
                 m_context,
                 item,
