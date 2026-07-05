@@ -1,296 +1,167 @@
-## This project is modified from:    
-https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a
+# ShellExtContextMenuHandler
 
-***
-# Changes:
-## 1. Add a common.h to define some strings
-## 2. Add context menu to any file type(*), but still support to filter file type
+基于微软官方 C++ Shell 扩展示例改造的**可配置右键菜单模块**。通过 `menu.json` 定义菜单项、过滤规则和动作，无需修改核心 COM 代码即可定制 Explorer 右键菜单。
 
-## * The second change make it possible to show context menu when file type is not associated with the program.
+原始 Demo 来源：[CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a)
 
-***
+## 特性
 
-=============================================================================
+- 注册到所有文件类型（`*`），在运行时按规则决定是否显示菜单
+- 通过 `config/menu.json` 配置多个菜单项
+- 支持 `messageBox` 与 `launch`（启动外部进程）两种动作
+- 支持扩展名、选中数量、文件/文件夹等过滤条件
+- 支持文件夹背景右键（无选中项时读取当前目录）
+- 内置调试日志（`OutputDebugString`，可用 DebugView 查看）
 
-## DYNAMIC LINK LIBRARY : CppShellExtContextMenuHandler Project Overview
+## 项目结构
 
-=============================================================================
+```
+├── config/menu.json          # 菜单配置（构建时复制到输出目录）
+├── tools/register.ps1        # 注册/卸载脚本
+├── FileContextMenuExt.*      # Shell COM 入口（薄封装）
+├── MenuProvider.*            # 上下文构建与命令分发
+├── MenuConfig.*              # JSON 配置加载
+├── Filter.*                  # 过滤规则引擎
+├── MenuActionHandler.*       # 动作执行（弹窗 / 启动进程）
+├── PathHelpers.*             # 路径占位符展开
+├── ShellLog.*                # 调试日志
+├── Reg.*                     # 注册表辅助函数
+└── common.h                  # COM 注册用名称常量
+```
 
-/////////////////////////////////////////////////////////////////////////////    
-## Summary:
+## 快速开始
 
-The code sample demonstrates creating a Shell context menu handler with C++. 
+### 1. 构建
 
-A context menu handler is a shell extension handler that adds commands to an 
-existing context menu. Context menu handlers are associated with a particular 
-file class and are called any time a context menu is displayed for a member 
-of the class. While you can add items to a file class context menu with the 
-registry, the items will be the same for all members of the class. By 
-implementing and registering such a handler, you can dynamically add items to 
-an object's context menu, customized for the particular object.
+使用 Visual Studio 打开 `CppShellExtContextMenuHandler.vcxproj`，选择 **x64** 配置（64 位 Windows 必须使用 x64 DLL），然后编译。
 
-Context menu handler is the most powerful but also the most complicated method 
-to implement. It is strongly encouraged that you implement a context menu 
-using one of the static verb methods if applicable:
-http://msdn.microsoft.com/en-us/library/dd758091.aspx
+命令行构建示例：
 
-The example context menu handler has the class ID (CLSID): 
-    {BFD98515-CD74-48A4-98E2-13D209E3EE4F}
+```powershell
+msbuild CppShellExtContextMenuHandler.vcxproj /p:Configuration=Release /p:Platform=x64
+```
 
-It adds the menu item "Display File Name (C++)" with icon to the context menu 
-when you right-click a .cpp file in the Windows Explorer. Clicking the menu 
-item brings up a message box that displays the full path of the .cpp file.
+构建完成后，`menu.json` 会自动复制到输出目录（如 `x64\Release\`）。
 
+### 2. 注册
 
-/////////////////////////////////////////////////////////////////////////////
-Setup and Removal:
+**方式 A：PowerShell 脚本（推荐）**
 
-### A. Setup
+以管理员身份运行：
 
-If you are going to use the Shell extension in a x64 Windows system, please 
-configure the Visual C++ project to target 64-bit platforms using project 
-configurations (http://msdn.microsoft.com/en-us/library/9yb4317s.aspx). Only 
-64-bit extension DLLs can be loaded in the 64-bit Windows Shell. 
+```powershell
+.\tools\register.ps1 -Action register
+```
 
-If the extension is to be loaded in a 32-bit Windows system, you can use the 
-default Win32 project configuration to build the project.
+卸载：
 
-In a command prompt running as administrator, navigate to the folder that 
-contains the build result CppShellExtContextMenuHandler.dll and enter the 
-command:
+```powershell
+.\tools\register.ps1 -Action unregister
+```
 
-    Regsvr32.exe CppShellExtContextMenuHandler.dll
+**方式 B：regsvr32**
 
-The context menu handler is registered successfully if you see a message box 
-saying:
+```powershell
+regsvr32.exe x64\Release\CppShellExtContextMenuHandler.dll
+```
 
-    "DllRegisterServer in CppShellExtContextMenuHandler.dll succeeded."
+> 确保 `menu.json` 与 DLL 位于同一目录。使用 `register.ps1` 时会自动复制配置文件。
 
-### B. Removal
+### 3. 验证
 
-In a command prompt running as administrator, navigate to the folder that 
-contains the build result CppShellExtContextMenuHandler.dll and enter the 
-command:
+在资源管理器中右键 `.cpp` 文件，应看到配置中的菜单项。修改 `config/menu.json` 后重新构建并复制配置，然后重启 Explorer 或重新注册扩展。
 
-    Regsvr32.exe /u CppShellExtContextMenuHandler.dll
+## 定制菜单
 
-The context menu handler is unregistered successfully if you see a message 
-box saying:
+编辑 `config/menu.json`。每个菜单项支持以下字段：
 
-    "DllUnregisterServer in CppShellExtContextMenuHandler.dll succeeded."
+| 字段 | 说明 |
+|------|------|
+| `id` | 唯一标识 |
+| `label` | 菜单显示文字（`&` 标记快捷键字母） |
+| `verb` | 命令动词，用于程序化调用 |
+| `helpText` | 状态栏帮助文字 |
+| `canonicalName` | 规范动词名 |
+| `separatorAfter` | 是否在此项后插入分隔线 |
+| `extensions` | 允许的扩展名列表，如 `[".cpp", ".h"]`，空数组表示不限制 |
+| `excludeExtensions` | 排除的扩展名 |
+| `minSelection` | 最少选中数量，默认 `1` |
+| `maxSelection` | 最多选中数量，`0` 表示不限制 |
+| `filesOnly` | 仅对文件显示，默认 `true` |
+| `foldersOnly` | 仅对文件夹/目录背景显示 |
+| `actionType` | `messageBox` 或 `launch` |
+| `actionTitle` | 弹窗标题（`messageBox`） |
+| `actionTemplate` | 弹窗内容模板（`messageBox`） |
+| `actionCommand` | 命令行（`launch`） |
+| `actionShowWindow` | 启动进程时是否显示窗口，默认 `false` |
 
+### 占位符
 
-/////////////////////////////////////////////////////////////////////////////
-### Demo:
+在 `actionTemplate` 和 `actionCommand` 中可使用：
 
-The following steps walk through a demonstration of the context menu handler 
-code sample.
+| 占位符 | 含义 |
+|--------|------|
+| `%1` | 第一个选中路径；无选中时为当前文件夹 |
+| `%*` | 所有选中路径（带引号、空格分隔） |
+| `%D` | 所在目录路径 |
 
-Step1. If you are going to use the Shell extension in a x64 Windows system, please configure the Visual C++ project to target 64-bit platforms using project configurations (http://msdn.microsoft.com/en-us/library/9yb4317s.aspx). Only 64-bit extension DLLs can be loaded in the 64-bit Windows Shell. 
+### 配置示例
 
-If the extension is to be loaded in a 32-bit Windows system, you can use the default Win32 project configuration.
-
-Step2. After you successfully build the sample project in Visual Studio 2010, you will get a DLL: CppShellExtContextMenuHandler.dll. Start a command prompt as administrator, navigate to the folder that contains the file and enter the command:
-
-    Regsvr32.exe CppShellExtContextMenuHandler.dll
-
-The context menu handler is registered successfully if you see a message box saying:
-
-    "DllRegisterServer in CppShellExtContextMenuHandler.dll succeeded."
-
-Step3. Find a .cpp file in the Windows Explorer (e.g. FileContextMenuExt.cpp in the sample folder), and right click it. You would see the "Display File Name (C++)" menu item with icon in the context menu and a menu seperator below it. Clicking the menu item brings up a message box that displays the full path of the .cpp file.
-
-The "Display File Name (C++)" menu item is added and displayed when only one .cpp file is selected and right-clicked. If more than one file are selected in the Windows Explorer, you will not see the context menu item.
-
-Step4. In the same command prompt, run the command 
-
-    Regsvr32.exe /u CppShellExtContextMenuHandler.dll
-
-to unregister the Shell context menu handler.
-
-
-/////////////////////////////////////////////////////////////////////////////
-Implementation:
-
-## A. Creating and configuring the project
-
-In Visual Studio 2010, create a Visual C++ / Win32 / Win32 Project named "CppShellExtContextMenuHandler". In the "Application Settings" page of Win32 Application Wizard, select the application type as "DLL" and check the "Empty project" option. After you click the Finish button, an empty Win32 DLL project is created.
-
------------------------------------------------------------------------------
-
-## B. Implementing a basic Component Object Model (COM) DLL
-
-Shell extension handlers are all in-process COM objects implemented as DLLs. Making a basic COM includes implementing DllGetClassObject, DllCanUnloadNow, DllRegisterServer, and DllUnregisterServer in (and exporting them from) the DLL, adding a COM class with the basic implementation of the IUnknown interface, preparing the class factory for your COM class. The relevant files in this code sample are:
-
-  **dllmain.cpp** - implements DllMain and the DllGetClassObject, DllCanUnloadNow, 
-    DllRegisterServer, DllUnregisterServer functions that are necessary for a 
-    COM DLL. 
-
-  **GlobalExportFunctions.def** - exports the DllGetClassObject, DllCanUnloadNow, 
-    DllRegisterServer, DllUnregisterServer functions from the DLL through the 
-    module-definition file. You need to pass the .def file to the linker by 
-    configuring the Module Definition File property in the project's Property 
-    Pages / Linker / Input property page.
-
-  **Reg.h/cpp** - defines the reusable helper functions to register or unregister 
-    in-process COM components in the registry: 
-    RegisterInprocServer, UnregisterInprocServer
-
-  **FileContextMenuExt.h/cpp** - defines the COM class. You can find the basic 
-    implementation of the IUnknown interface in the files.
-
-  **ClassFactory.h/cpp** - defines the class factory for the COM class. 
-
------------------------------------------------------------------------------
-
-## C. Implementing the context menu handler and registering it for a certain file class
-
-Implementing the context menu handler:
-
-The FileContextMenuExt.h/cpp files define a context menu handler. The 
-context menu handler must implement the IShellExtInit and IContextMenu 
-interfaces. A context menu extension is instantiated when the user displays 
-the context menu for an object of a class for which the context menu handler 
-has been registered.
-
-    class FileContextMenuExt : public IShellExtInit, public IContextMenu
+```json
+{
+  "menuItems": [
     {
-    public:
-        // IShellExtInit
-        IFACEMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT 
-            pDataObj, HKEY hKeyProgID);
-
-        // IContextMenu
-        IFACEMETHODIMP QueryContextMenu(HMENU hMenu, UINT indexMenu, 
-            UINT idCmdFirst, UINT idCmdLast, UINT uFlags);
-        IFACEMETHODIMP InvokeCommand(LPCMINVOKECOMMANDINFO pici);
-        IFACEMETHODIMP GetCommandString(UINT_PTR idCommand, UINT uFlags, 
-            UINT *pwReserved, LPSTR pszName, UINT cchMax);
-    };
-	
-  ### 1. Implementing IShellExtInit
-
-  After the context menu extension COM object is instantiated, the 
-  IShellExtInit::Initialize method is called. IShellExtInit::Initialize 
-  supplies the context menu extension with an IDataObject object that 
-  holds one or more file names in CF_HDROP format. You can enumerate the 
-  selected files and folders through the IDataObject object. If any value 
-  other than S_OK is returned from IShellExtInit::Initialize, the context 
-  menu extension will not be used.
-
-  In the code sample, the FileContextMenuExt::Initialize method enumerates 
-  the selected files and folders. If only one file is selected, the method 
-  stores the file name for later use and returns S_OK to proceed. If more 
-  than one file or no file are selected, the method returns E_FAIL to not use 
-  the context menu extension.
-
-  ### 2. Implementing IContextMenu
-
-  After IShellExtInit::Initialize returns S_OK, the 
-  IContextMenu::QueryContextMenu method is called to obtain the menu item or 
-  items that the context menu extension will add. The QueryContextMenu 
-  implementation is fairly straightforward. The context menu extension adds 
-  its menu items using the InsertMenuItem or similar functions. The menu 
-  command identifiers must be greater than or equal to idCmdFirst and must be 
-  less than idCmdLast. QueryContextMenu must return the greatest numeric 
-  identifier added to the menu plus one. The best way to assign menu command 
-  identifiers is to start at zero and work up in sequence. If the context 
-  menu extension does not need to add any items to the menu, it should simply 
-  return zero from QueryContextMenu.
-
-  In this code sample, we insert the menu item "Display File Name (C++)" with 
-  an icon, and add a menu seperator below it.
-
-  IContextMenu::GetCommandString is called to retrieve textual data for the 
-  menu item, such as help text to be displayed for the menu item. If a user 
-  highlights one of the items added by the context menu handler, the handler's 
-  IContextMenu::GetCommandString method is called to request a Help text 
-  string that will be displayed on the Windows Explorer status bar. This 
-  method can also be called to request the verb string that is assigned to a 
-  command. Either ANSI or Unicode verb strings can be requested. This example 
-  only implements support for the Unicode values of uFlags, because only 
-  those have been used in Windows Explorer since Windows 2000.
-
-  IContextMenu::InvokeCommand is called when one of the menu items installed 
-  by the context menu extension is selected. The context menu performs or 
-  initiates the desired actions in response to this method.
-
------------
-Registering the handler for a certain file class:
-
-The CLSID of the handler is declared at the beginning of dllmain.cpp.
-
-// {BFD98515-CD74-48A4-98E2-13D209E3EE4F}
-const CLSID CLSID_FileContextMenuExt = 
-{ 0xBFD98515, 0xCD74, 0x48A4, { 0x98, 0xE2, 0x13, 0xD2, 0x09, 0xE3, 0xEE, 0x4F } };
-
-When you write your own handler, you must create a new CLSID by using the 
-"Create GUID" tool in the Tools menu, and specify the CLSID value here.
-
-Context menu handlers are associated with either a file class or a folder. 
-For file classes, the handler is registered under the following subkey.
-
-    HKEY_CLASSES_ROOT\<File Type>\shellex\ContextMenuHandlers
-
-The registration of the context menu handler is implemented in the DllRegisterServer function of dllmain.cpp. DllRegisterServer first calls the RegisterInprocServer function in Reg.h/cpp to register the COM component. Next, it calls RegisterShellExtContextMenuHandler to associate the handler with a certain file type. If the file type starts with '.', try to read the default value of the HKCR\<File Type> key which may contain the Program ID to which the file type is linked. If the default value is not empty, use the Program ID as the file type to proceed the registration. 
-
-For example, this code sample associates the handler with '.cpp' files. HKCR\.cpp has the default value 'VisualStudio.cpp.10.0' by default when Visual Studio 2010 is installed, so we proceed to register the handler under HKCR\VisualStudio.cpp.10.0\ instead of under HKCR\.cpp. The following keys and values are added in the registration process of the sample handler. 
-
-    HKCR
-    {
-        NoRemove CLSID
-        {
-            ForceRemove {BFD98515-CD74-48A4-98E2-13D209E3EE4F} = 
-                s 'CppShellExtContextMenuHandler.FileContextMenuExt Class'
-            {
-                InprocServer32 = s '<Path of CppShellExtContextMenuHandler.DLL file>'
-                {
-                    val ThreadingModel = s 'Apartment'
-                }
-            }
-        }
-        NoRemove .cpp = s 'VisualStudio.cpp.10.0'
-        NoRemove VisualStudio.cpp.10.0
-        {
-            NoRemove shellex
-            {
-                NoRemove ContextMenuHandlers
-                {
-                    {BFD98515-CD74-48A4-98E2-13D209E3EE4F} = 
-                        s 'CppShellExtContextMenuHandler.FileContextMenuExt'
-                }
-            }
-        }
+      "id": "open-in-notepad",
+      "label": "Open in &Notepad",
+      "verb": "opennotepad",
+      "extensions": [".txt", ".cpp"],
+      "minSelection": 1,
+      "maxSelection": 1,
+      "actionType": "launch",
+      "actionCommand": "notepad.exe %1",
+      "actionShowWindow": true
     }
+  ]
+}
+```
 
-The unregistration is implemented in the DllUnregisterServer function of dllmain.cpp. It removes the HKCR\CLSID\{<CLSID>} key and the {<CLSID>} key under HKCR\<File Type>\shellex\ContextMenuHandlers.
+若 `menu.json` 缺失或解析失败，扩展会回退到 `common.h` 中定义的内置菜单项。
 
+## 修改 COM 身份信息
 
-/////////////////////////////////////////////////////////////////////////////    
-### References:
+发布自己的扩展时，请修改：
 
-MSDN: Initializing Shell Extensions    
-http://msdn.microsoft.com/en-us/library/cc144105.aspx
+1. `dllmain.cpp` 中的 `CLSID_FileContextMenuExt`（使用 Visual Studio「创建 GUID」工具生成新值）
+2. `common.h` 中的 `L_Friendly_Class_Name` 和 `L_Friendly_Menu_Name`
 
-MSDN: Creating Context Menu Handlers    
-http://msdn.microsoft.com/en-us/library/bb776881.aspx
+## 调试
 
-MSDN: Implementing the Context Menu COM Object    
-http://msdn.microsoft.com/en-us/library/ms677106.aspx
+扩展通过 `OutputDebugString` 输出日志，前缀为 `[ShellExt]`。推荐用 [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview) 查看。
 
-MSDN: Extending Shortcut Menus    
-http://msdn.microsoft.com/en-us/library/cc144101.aspx
+常见日志：
 
-MSDN: Choosing a Static or Dynamic Shortcut Menu Method    
-http://msdn.microsoft.com/en-us/library/dd758091.aspx
+- 配置加载成功/失败
+- 当前上下文无可见菜单项
+- `CreateProcess` 失败
 
-The Complete Idiot's Guide to Writing Shell Extensions    
-http://www.codeproject.com/KB/shell/shellextguide1.aspx    
-http://www.codeproject.com/KB/shell/shellextguide2.aspx    
-http://www.codeproject.com/KB/shell/shellextguide7.aspx
+## 注意事项
 
-How to Use Submenus in a Context Menu Shell Extension    
-http://www.codeproject.com/KB/shell/ctxextsubmenu.aspx
+- **位数匹配**：64 位 Windows 的 Explorer 只能加载 x64 DLL
+- **管理员权限**：注册 COM 组件需要提升权限
+- **性能**：避免在 `Initialize` / `QueryContextMenu` 中执行耗时操作；耗时任务应通过 `launch` 启动外部进程
+- **Explorer 缓存**：修改 DLL 后建议注销再注册，必要时重启 Explorer
 
+## 架构说明
 
-/////////////////////////////////////////////////////////////////////////////
+```
+Explorer 右键
+    → IShellExtInit::Initialize   （解析选中项，过滤菜单）
+    → IContextMenu::QueryContextMenu （插入可见项）
+    → IContextMenu::InvokeCommand    （按 verb/offset 分发动作）
+```
+
+核心逻辑与 Shell COM 胶水代码分离：定制时只需改 `config/menu.json`（及可选的 `common.h` 回退项），不必改动 `FileContextMenuExt` 的接口实现。
+
+## 许可证
+
+基于微软示例代码（[Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)）修改。Microsoft 原始版权说明保留在源文件头部。
