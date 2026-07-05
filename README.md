@@ -1,170 +1,150 @@
 # ShellExtContextMenuHandler
 
-基于微软官方 C++ Shell 扩展示例改造的**可配置右键菜单模块**。通过 `menu.json` 定义菜单项、过滤规则和动作，无需修改核心 COM 代码即可定制 Explorer 右键菜单。
+**English** | [简体中文](README.zh-CN.md)
 
-原始 Demo 来源：[CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a)
+A **configurable context menu module** derived from the official Microsoft C++ Shell extension sample. Define menu items, filters, and actions in `menu.json` without changing core COM code.
 
-## 特性
+Based on: [CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a)
 
-- 注册到所有文件类型（`*`），在运行时按规则决定是否显示菜单
-- 通过 `config/menu.json` 配置多个菜单项
-- 支持 `messageBox` 与 `launch`（启动外部进程）两种动作
-- 支持扩展名、选中数量、文件/文件夹等过滤条件
-- 支持文件夹背景右键（无选中项时读取当前目录）
-- 内置调试日志（`OutputDebugString`，可用 DebugView 查看）
-- **CMake** 构建，可生成 Visual Studio 解决方案
+## Features
 
-## 项目结构
+- Registered for all file types (`*`), with runtime rules controlling visibility
+- Multiple menu items via `config/menu.json`
+- `messageBox` and `launch` (spawn process) actions
+- Filters: extension, selection count, files vs folders
+- Folder background context (current directory when nothing is selected)
+- Debug logging via `OutputDebugString` ([DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview))
+- **CMake** build with generated Visual Studio projects
+- **Layered Gate architecture** (Extension / Item / Presentation) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+
+## Project layout
 
 ```
-├── CMakeLists.txt                 # 构建入口（单一事实来源）
-├── config/
-│   └── menu.json                  # 菜单配置
-├── include/
-│   └── shell_ext/
-│       └── common.h               # COM 注册用名称常量
+├── CMakeLists.txt
+├── docs/
+│   ├── ARCHITECTURE.md            # Architecture (English)
+│   └── ARCHITECTURE.zh-CN.md      # 架构说明（简体中文）
+├── README.md                      # English (default)
+├── README.zh-CN.md                # 简体中文
+├── config/menu.json
+├── include/shell_ext/common.h
 ├── src/
-│   ├── extension/                 # Shell COM 入口
-│   │   ├── dllmain.cpp
-│   │   ├── ClassFactory.*
-│   │   └── FileContextMenuExt.*
-│   ├── menu/                      # 菜单引擎
-│   │   ├── MenuProvider.*
-│   │   ├── MenuConfig.*
-│   │   ├── Filter.*
-│   │   ├── MenuActionHandler.*
-│   │   ├── PathHelpers.*
-│   │   └── ShellLog.*
-│   ├── registry/                  # 注册表辅助
-│   │   └── Reg.*
-│   └── resources/                 # 资源与模块导出
-│       ├── ShellExtContextMenuHandler.rc
-│       ├── GlobalExportFunctions.def
-│       ├── resource.h
-│       └── OK.bmp
+│   ├── extension/     # Shell COM entry
+│   ├── context/       # MenuContext, ContextBuilder
+│   ├── gates/         # Gate interfaces, JsonFilterGate
+│   ├── menu/          # MenuProvider, config, actions
+│   ├── registry/
+│   └── resources/
 ├── tools/
-│   ├── generate-vs.ps1            # 由 CMake 生成 VS 工程
-│   └── register.ps1               # 注册/卸载脚本
-└── build/                         # 生成目录（git 忽略）
-    ├── ShellExtContextMenuHandler.slnx   # VS 2026 解决方案
-    ├── CppShellExtContextMenuHandler.vcxproj
-    └── bin/Release/*.dll
+│   ├── generate-vs.ps1
+│   └── register.ps1
+└── build/             # generated (gitignored)
 ```
 
-## 快速开始
+## Quick start
 
-### 1. 生成 Visual Studio 工程
+### 1. Generate Visual Studio projects
 
 ```powershell
 .\tools\generate-vs.ps1
 ```
 
-这会在 `build/` 目录生成 `ShellExtContextMenuHandler.slnx`（VS 2026 格式）及 `CppShellExtContextMenuHandler.vcxproj`。可直接用 Visual Studio 打开该解决方案。
+This creates `build/ShellExtContextMenuHandler.slnx` and `CppShellExtContextMenuHandler.vcxproj`.
 
-也可手动执行：
+Or manually:
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 ```
 
-### 2. 构建
-
-**命令行：**
+### 2. Build
 
 ```powershell
 cmake --build build --config Release
 ```
 
-**Visual Studio：** 打开 `build/ShellExtContextMenuHandler.slnx`，选择 `Release | x64` 后编译。
+Or open `build/ShellExtContextMenuHandler.slnx` in Visual Studio (`Release | x64`).
 
-构建产物位于 `build/bin/Release/`：
+Output: `build/bin/Release/CppShellExtContextMenuHandler.dll` and `menu.json`.
 
-- `CppShellExtContextMenuHandler.dll`
-- `menu.json`（自动复制）
+### 3. Register
 
-### 3. 注册
-
-以管理员身份运行：
+Run as administrator:
 
 ```powershell
 .\tools\register.ps1 -Action register
+.\tools\register.ps1 -Action unregister   # uninstall
 ```
 
-卸载：
+`register.ps1` finds the DLL under `build/bin/Release/` and copies `config/menu.json` beside it.
 
-```powershell
-.\tools\register.ps1 -Action unregister
-```
+### 4. Verify
 
-> `register.ps1` 会自动在 `build/bin/Release/` 等常见输出路径中查找 DLL，并将 `config/menu.json` 复制到 DLL 同目录。
+Right-click a `.cpp` file in Explorer — configured menu items should appear.
 
-### 4. 验证
+## Customize menus
 
-在资源管理器中右键 `.cpp` 文件，应看到配置中的菜单项。
+Edit `config/menu.json`:
 
-## 定制菜单
+| Field | Description |
+|-------|-------------|
+| `id` | Unique id |
+| `label` | Menu text (`&` for shortcut key) |
+| `verb` | Command verb for programmatic invoke |
+| `helpText` | Status bar help |
+| `canonicalName` | Canonical verb name |
+| `separatorAfter` | Insert separator after this item |
+| `extensions` | Allowed extensions, e.g. `[".cpp"]`; `[]` = no limit |
+| `excludeExtensions` | Excluded extensions |
+| `minSelection` | Minimum selection count (default `1`) |
+| `maxSelection` | Maximum count; `0` = unlimited |
+| `filesOnly` | Files only (default `true`) |
+| `foldersOnly` | Folders / folder background only |
+| `actionType` | `messageBox` or `launch` |
+| `actionTitle` | Dialog title (`messageBox`) |
+| `actionTemplate` | Dialog body template (`messageBox`) |
+| `actionCommand` | Command line (`launch`) |
+| `actionShowWindow` | Show window when launching (default `false`) |
 
-编辑 `config/menu.json`。每个菜单项支持以下字段：
+### Placeholders
 
-| 字段 | 说明 |
-|------|------|
-| `id` | 唯一标识 |
-| `label` | 菜单显示文字（`&` 标记快捷键字母） |
-| `verb` | 命令动词，用于程序化调用 |
-| `helpText` | 状态栏帮助文字 |
-| `canonicalName` | 规范动词名 |
-| `separatorAfter` | 是否在此项后插入分隔线 |
-| `extensions` | 允许的扩展名列表，如 `[".cpp", ".h"]`，空数组表示不限制 |
-| `excludeExtensions` | 排除的扩展名 |
-| `minSelection` | 最少选中数量，默认 `1` |
-| `maxSelection` | 最多选中数量，`0` 表示不限制 |
-| `filesOnly` | 仅对文件显示，默认 `true` |
-| `foldersOnly` | 仅对文件夹/目录背景显示 |
-| `actionType` | `messageBox` 或 `launch` |
-| `actionTitle` | 弹窗标题（`messageBox`） |
-| `actionTemplate` | 弹窗内容模板（`messageBox`） |
-| `actionCommand` | 命令行（`launch`） |
-| `actionShowWindow` | 启动进程时是否显示窗口，默认 `false` |
+| Token | Meaning |
+|-------|---------|
+| `%1` | First selected path, or current folder if none |
+| `%*` | All selected paths (quoted, space-separated) |
+| `%D` | Parent directory |
 
-### 占位符
+If `menu.json` is missing or invalid, the extension falls back to built-in items in `include/shell_ext/common.h`.
 
-| 占位符 | 含义 |
-|--------|------|
-| `%1` | 第一个选中路径；无选中时为当前文件夹 |
-| `%*` | 所有选中路径（带引号、空格分隔） |
-| `%D` | 所在目录路径 |
+## COM identity
 
-若 `menu.json` 缺失或解析失败，扩展会回退到 `include/shell_ext/common.h` 中定义的内置菜单项。
+When shipping your own fork, change:
 
-## 修改 COM 身份信息
+1. `CLSID_FileContextMenuExt` in `src/extension/dllmain.cpp`
+2. `L_Friendly_Class_Name` and `L_Friendly_Menu_Name` in `include/shell_ext/common.h`
 
-发布自己的扩展时，请修改：
+## Debugging
 
-1. `src/extension/dllmain.cpp` 中的 `CLSID_FileContextMenuExt`
-2. `include/shell_ext/common.h` 中的 `L_Friendly_Class_Name` 和 `L_Friendly_Menu_Name`
+Logs use prefix `[ShellExt]` via `OutputDebugString`. Use [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview).
 
-## 调试
+## Notes
 
-扩展通过 `OutputDebugString` 输出日志，前缀为 `[ShellExt]`。推荐用 [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview) 查看。
+- **Bitness:** 64-bit Explorer requires a 64-bit DLL
+- **Admin:** COM registration needs elevation
+- **Regenerate:** Re-run `generate-vs.ps1` after `CMakeLists.txt` changes
+- **Explorer cache:** Unregister/re-register after DLL changes; restart Explorer if needed
 
-## 注意事项
-
-- **位数匹配**：64 位 Windows 的 Explorer 只能加载 x64 DLL
-- **管理员权限**：注册 COM 组件需要提升权限
-- **重新生成工程**：修改 `CMakeLists.txt` 后重新运行 `generate-vs.ps1`
-- **Explorer 缓存**：修改 DLL 后建议注销再注册，必要时重启 Explorer
-
-## 架构说明
+## Architecture (overview)
 
 ```
-Explorer 右键
-    → IShellExtInit::Initialize        （解析选中项，过滤菜单）
-    → IContextMenu::QueryContextMenu （插入可见项）
-    → IContextMenu::InvokeCommand    （按 verb/offset 分发动作）
+Right-click in Explorer
+  → IShellExtInit::Initialize
+  → IContextMenu::QueryContextMenu
+  → IContextMenu::InvokeCommand
 ```
 
-核心逻辑与 Shell COM 胶水代码分离：定制时只需改 `config/menu.json`（及可选的 `common.h` 回退项）。
+Shell COM glue stays thin; most customization is `config/menu.json` plus optional gates/executors. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-## 许可证
+## License
 
-基于微软示例代码（[Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)）修改。Microsoft 原始版权说明保留在源文件头部。
+Derived from the Microsoft sample ([Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)). Original Microsoft copyright headers remain in source files.
