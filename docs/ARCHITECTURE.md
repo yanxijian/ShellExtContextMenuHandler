@@ -1,133 +1,133 @@
-# Architecture
+# 架构说明
 
-**English** | [简体中文](ARCHITECTURE.zh-CN.md)
+**简体中文** | [English](ARCHITECTURE.en.md)
 
-**Design target:** Windows 7 SP1 and later (x86 / x64 Explorer)
+**设计目标：** Windows 7 SP1 及之后（x86 / x64 Explorer）
 
-This document is the corrected architecture baseline. Win7 support is a **design and validation goal**, not a claim that every build configuration has been verified on Win7 hardware.
+本文档为纠错后的架构基线。Win7 支持是**设计与验证目标**，不代表所有构建配置已在 Win7 实机上验证。
 
-## Goals
+## 目标
 
-- Fork-friendly advanced demo for Shell context menu extensions
-- `IContextMenu` as the only required integration path (Win7 through Win11)
-- Pluggable gates for layered visibility checks
-- JSON for simple menu rules, C++ for complex logic
-- Pluggable action executors (P1+)
-- SVG rasterized icons with DPI fallbacks (P3+)
+- 可供 Fork 的高级 Shell 右键菜单 Demo
+- 仅以 `IContextMenu` 为必需集成路径（Win7 至 Win11）
+- 可插拔 Gate 实现分层可见性判断
+- JSON 处理简单规则，C++ 处理复杂逻辑
+- 可插拔动作执行器（P1+）
+- SVG 光栅化图标 + DPI 回退（P3+）
 
-## Non-goals
+## 非目标
 
-- Win11 compact menu / `IExplorerCommand` as the primary path
-- Expressing all business rules in JSON alone
-- Heavy I/O inside `Initialize` or `QueryContextMenu`
+- 以 Win11 精简菜单 / `IExplorerCommand` 为主路径
+- 仅用 JSON 表达全部业务规则
+- 在 `Initialize` / `QueryContextMenu` 中做重 IO
 
-## Call flow
+## 调用流程
 
 ```
 Initialize
-  ContextBuilder  (paths, attributes, progId — parsed once)
-    -> Gate 1 (ExtensionGate)
-    -> Gate 2 (ItemGate per menu item) -> candidateItems
-    -> no candidates => E_FAIL
-    -> otherwise     => S_OK
+  ContextBuilder（路径、属性、progId — 只解析一次）
+    → Gate 1（ExtensionGate）
+    → Gate 2（逐项 ItemGate）→ candidateItems
+    → 无候选项 → E_FAIL
+    → 否则     → S_OK
 
 QueryContextMenu
-  Gate 3 (PresentationGate per candidate) -> insertedItems
-    -> Hidden   : not inserted
-    -> Disabled : inserted with MFS_DISABLED
-    -> Enabled  : inserted normally
-  Assign cmd IDs only to insertedItems (non-Hidden)
-  Load icons (P3+)
+  Gate 3（逐项 PresentationGate）→ insertedItems
+    → Hidden   ：不插入菜单
+    → Disabled ：插入但 MFS_DISABLED
+    → Enabled  ：正常插入
+  仅为 insertedItems 分配 cmd ID
+  加载图标（P3+）
 
 InvokeCommand
-  Map offset/verb to insertedItems
-  -> skip execution when Disabled
-  -> Action executor chain (P1+)
+  按 offset/verb 映射 insertedItems
+  → Disabled 项不执行
+  → 动作执行器链（P1+）
 ```
 
-## Gate semantics
+## Gate 语义
 
-| Gate | When | Pass | Fail |
+| Gate | 时机 | 通过 | 失败 |
 |------|------|------|------|
-| Gate 1 | `Initialize` | Extension may participate | `E_FAIL`, handler not used |
-| Gate 2 | `Initialize` | Item enters `candidateItems` | Item omitted |
-| Gate 3 | `QueryContextMenu` | `Enabled` / `Disabled` / `Hidden` | `Hidden` omits item |
+| Gate 1 | `Initialize` | 扩展可参与 | `E_FAIL`，不使用本扩展 |
+| Gate 2 | `Initialize` | 项进入 `candidateItems` | 省略该项 |
+| Gate 3 | `QueryContextMenu` | `Enabled` / `Disabled` / `Hidden` | `Hidden` 不插入 |
 
-**Important:** Gate 1 may pass while Gate 2 yields zero items. In that case `Initialize` still returns `E_FAIL` (same as today).
+**重要：** Gate 1 可通过，但 Gate 2 无候选项时，`Initialize` 仍返回 `E_FAIL`（与当前行为一致）。
 
-Gate 1 should be very fast (no disk scans, no network). JSON config is cached at process scope after first load.
+Gate 1 必须极快（不扫盘、不访问网络）。JSON 配置在进程内首次加载后缓存。
 
 ## MenuContext
 
-Built once per right-click in `ContextBuilder`. Gates read `MenuContext` only; they must not call `GetFileAttributes` again for items already parsed.
+每次右键在 `ContextBuilder` 中构建一次。Gate 只读 `MenuContext`，不得对已解析项再次调用 `GetFileAttributes`。
 
-Suggested detection dimensions (documentation / fork examples, not all implemented in the demo):
+建议检测维度（文档/Fork 示例，Demo 不必全实现）：
 
-- Extension, ProgID, file/folder name patterns
-- Path prefix, drive, UNC
-- Selection count, mixed file+folder selection
-- Attributes: directory, readonly, hidden, reparse point
-- Folder background (no selection, `folderPath` set)
+- 扩展名、ProgID、文件/文件夹名模式
+- 路径前缀、盘符、UNC
+- 选中数量、文件+文件夹混合选中
+- 属性：目录、只读、隐藏、重解析点
+- 文件夹背景（无选中、`folderPath` 有值）
 
-## Command ID mapping
+## 命令 ID 映射
 
-- `idCmdFirst + offset` maps to `insertedItems[offset]`
-- Separators do not consume command IDs
-- `GetCommandString` and `InvokeCommand` use the same `insertedItems` list
-- Verb lookup is also supported via `GetCommandString` / `InvokeCommand`
+- `idCmdFirst + offset` 对应 `insertedItems[offset]`
+- 分隔线不占用命令 ID
+- `GetCommandString` 与 `InvokeCommand` 使用同一 `insertedItems` 列表
+- 也支持通过 verb 查找
 
-## Configuration model
+## 配置模型
 
-`config/menu.json` — declarative labels, filters, actions.
+`config/menu.json`：声明式文案、过滤、动作参数。
 
-C++ gate / executor registration — `GateRegistry` (and `ExecutorRegistry` in P1).
+C++：`GateRegistry` 注册 Gate（P1+ 为 `ExecutorRegistry` 注册动作）。
 
-Future JSON field:
+未来 JSON 字段示例：
 
 ```json
 "gates": ["jsonFilter", "custom:MyGate"]
 ```
 
-P0 registers default gates in code: `extensionPass`, `jsonFilter`, `presentationPass`.
+P0 在代码中注册默认 Gate：`extensionPass`、`jsonFilter`、`presentationPass`。
 
-## Platform notes (Win7 SP1+)
+## 平台说明（Win7 SP1+）
 
-| Topic | Approach |
-|-------|----------|
-| Shell API | `IShellExtInit`, `IContextMenu` |
-| Build | `_WIN32_WINNT=0x0601`, `WINVER=0x0601` |
-| Newer APIs | Dynamic load after OS version check |
-| DPI / icons | System DPI on Win7; per-monitor on Win8.1+ (P2/P3) |
-| Registration | `*` handler + runtime gates; match DLL bitness to Explorer |
-| Toolchain | VS 2026 output must be validated on Win7 VM before claiming support |
+| 主题 | 做法 |
+|------|------|
+| Shell API | `IShellExtInit`、`IContextMenu` |
+| 构建 | `_WIN32_WINNT=0x0601`、`WINVER=0x0601` |
+| 较新 API | 检测系统版本后动态加载 |
+| DPI/图标 | Win7 用系统 DPI；Win8.1+ 支持 per-monitor（P2/P3） |
+| 注册 | `*` 处理器 + 运行时 Gate；DLL 位数与 Explorer 一致 |
+| 工具链 | 声称支持 Win7 前须在 Win7 VM 验证 VS 2026 产物 |
 
-## Source layout
+## 源码布局
 
 ```
 src/
-  extension/     COM shell entry (thin)
-  context/       MenuContext, ContextBuilder
-  gates/         Gate interfaces, registry, JsonFilterGate
-  menu/          MenuProvider, MenuItem, config, actions
-  registry/      COM registration helpers
-  resources/     RC, DEF, bitmaps
+  extension/     COM 薄壳
+  context/       MenuContext、ContextBuilder
+  gates/         Gate 接口、注册表、JsonFilterGate
+  menu/          MenuProvider、配置、动作
+  registry/      注册表辅助
+  resources/     RC、DEF、位图
 ```
 
-## Roadmap
+## 路线图
 
-| Phase | Scope |
-|-------|--------|
-| **P0** | ContextBuilder, Gate 1/2/3 skeleton, JsonFilterGate, candidate/inserted split, Win7 CMake macros |
-| **P1** | `IActionExecutor` chain |
-| **P2** | `platform/DpiProvider`, `OsVersion` |
-| **P3** | SVG icon provider |
-| **P4** | Sample custom gates/executors, JSON `gates` array |
-| **Appendix** | `IExplorerCommand` experiments (not Win7 baseline) |
+| 阶段 | 内容 |
+|------|------|
+| **P0** | ContextBuilder、Gate 1/2/3 骨架、JsonFilterGate、candidate/inserted 分离、Win7 CMake 宏 |
+| **P1** | `IActionExecutor` 责任链 |
+| **P2** | `platform/DpiProvider`、`OsVersion` |
+| **P3** | SVG 图标提供器 |
+| **P4** | 示例 Gate/Executor、JSON `gates` 数组 |
+| **附录** | `IExplorerCommand` 试验（非 Win7 基线） |
 
-## Fork guide
+## Fork 指南
 
-1. Change CLSID and names in `dllmain.cpp` / `include/shell_ext/common.h`
-2. Edit `config/menu.json` for most menu changes
-3. Add `src/gates/MyGate.cpp` and register in `GateRegistry`
-4. Add `src/actions/MyExecutor.cpp` (P1+) and register
-5. Test on Win7 SP1 x64 VM before release
+1. 修改 `dllmain.cpp` / `include/shell_ext/common.h` 中的 CLSID 与名称
+2. 多数菜单改动只需编辑 `config/menu.json`
+3. 新增 `src/gates/MyGate.cpp` 并在 `GateRegistry` 注册
+4. 新增 `src/actions/MyExecutor.cpp`（P1+）并注册
+5. 发布前在 Win7 SP1 x64 虚拟机测试

@@ -1,150 +1,150 @@
 # ShellExtContextMenuHandler
 
-**English** | [简体中文](README.zh-CN.md)
+**简体中文** | [English](README.en.md)
 
-A **configurable context menu module** derived from the official Microsoft C++ Shell extension sample. Define menu items, filters, and actions in `menu.json` without changing core COM code.
+基于微软官方 C++ Shell 扩展示例改造的**可配置右键菜单模块**。在 `menu.json` 中定义菜单项、过滤规则与动作，无需改动核心 COM 代码。
 
-Based on: [CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a)
+来源：[CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/windowsapps/CppShellExtContextMenuHandl-410a709a)
 
-## Features
+## 功能
 
-- Registered for all file types (`*`), with runtime rules controlling visibility
-- Multiple menu items via `config/menu.json`
-- `messageBox` and `launch` (spawn process) actions
-- Filters: extension, selection count, files vs folders
-- Folder background context (current directory when nothing is selected)
-- Debug logging via `OutputDebugString` ([DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview))
-- **CMake** build with generated Visual Studio projects
-- **Layered Gate architecture** (Extension / Item / Presentation) — see [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
+- 注册为所有文件类型（`*`），由运行时规则控制可见性
+- 通过 `config/menu.json` 配置多个菜单项
+- 支持 `messageBox` 与 `launch`（启动进程）动作
+- 过滤条件：扩展名、选中数量、文件/文件夹
+- 文件夹背景右键（无选中时使用当前目录）
+- 通过 `OutputDebugString` 输出调试日志（[DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview)）
+- **CMake** 构建，可生成 Visual Studio 工程
+- **分层 Gate 架构**（Extension / Item / Presentation）— 见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
-## Project layout
+## 项目结构
 
 ```
 ├── CMakeLists.txt
 ├── docs/
-│   ├── ARCHITECTURE.md            # Architecture (English)
-│   └── ARCHITECTURE.zh-CN.md      # 架构说明（简体中文）
-├── README.md                      # English (default)
-├── README.zh-CN.md                # 简体中文
+│   ├── ARCHITECTURE.md            # 架构说明（简体中文，默认）
+│   └── ARCHITECTURE.en.md         # Architecture (English)
+├── README.md                      # 简体中文（默认）
+├── README.en.md                   # English
 ├── config/menu.json
 ├── include/shell_ext/common.h
 ├── src/
-│   ├── extension/     # Shell COM entry
-│   ├── context/       # MenuContext, ContextBuilder
-│   ├── gates/         # Gate interfaces, JsonFilterGate
-│   ├── menu/          # MenuProvider, config, actions
+│   ├── extension/     # Shell COM 入口
+│   ├── context/       # MenuContext、ContextBuilder
+│   ├── gates/         # Gate 接口、JsonFilterGate
+│   ├── menu/          # MenuProvider、配置、动作
 │   ├── registry/
 │   └── resources/
 ├── tools/
 │   ├── generate-vs.ps1
 │   └── register.ps1
-└── build/             # generated (gitignored)
+└── build/             # 生成目录（gitignore）
 ```
 
-## Quick start
+## 快速开始
 
-### 1. Generate Visual Studio projects
+### 1. 生成 Visual Studio 工程
 
 ```powershell
 .\tools\generate-vs.ps1
 ```
 
-This creates `build/ShellExtContextMenuHandler.slnx` and `CppShellExtContextMenuHandler.vcxproj`.
+将生成 `build/ShellExtContextMenuHandler.slnx` 与 `CppShellExtContextMenuHandler.vcxproj`。
 
-Or manually:
+或手动执行：
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 ```
 
-### 2. Build
+### 2. 编译
 
 ```powershell
 cmake --build build --config Release
 ```
 
-Or open `build/ShellExtContextMenuHandler.slnx` in Visual Studio (`Release | x64`).
+或在 Visual Studio 中打开 `build/ShellExtContextMenuHandler.slnx`（`Release | x64`）。
 
-Output: `build/bin/Release/CppShellExtContextMenuHandler.dll` and `menu.json`.
+输出：`build/bin/Release/CppShellExtContextMenuHandler.dll` 与 `menu.json`。
 
-### 3. Register
+### 3. 注册
 
-Run as administrator:
+以管理员身份运行：
 
 ```powershell
 .\tools\register.ps1 -Action register
-.\tools\register.ps1 -Action unregister   # uninstall
+.\tools\register.ps1 -Action unregister   # 卸载
 ```
 
-`register.ps1` finds the DLL under `build/bin/Release/` and copies `config/menu.json` beside it.
+`register.ps1` 会在 `build/bin/Release/` 下查找 DLL，并将 `config/menu.json` 复制到 DLL 同目录。
 
-### 4. Verify
+### 4. 验证
 
-Right-click a `.cpp` file in Explorer — configured menu items should appear.
+在资源管理器中右键 `.cpp` 文件，应出现配置的菜单项。
 
-## Customize menus
+## 自定义菜单
 
-Edit `config/menu.json`:
+编辑 `config/menu.json`：
 
-| Field | Description |
-|-------|-------------|
-| `id` | Unique id |
-| `label` | Menu text (`&` for shortcut key) |
-| `verb` | Command verb for programmatic invoke |
-| `helpText` | Status bar help |
-| `canonicalName` | Canonical verb name |
-| `separatorAfter` | Insert separator after this item |
-| `extensions` | Allowed extensions, e.g. `[".cpp"]`; `[]` = no limit |
-| `excludeExtensions` | Excluded extensions |
-| `minSelection` | Minimum selection count (default `1`) |
-| `maxSelection` | Maximum count; `0` = unlimited |
-| `filesOnly` | Files only (default `true`) |
-| `foldersOnly` | Folders / folder background only |
-| `actionType` | `messageBox` or `launch` |
-| `actionTitle` | Dialog title (`messageBox`) |
-| `actionTemplate` | Dialog body template (`messageBox`) |
-| `actionCommand` | Command line (`launch`) |
-| `actionShowWindow` | Show window when launching (default `false`) |
+| 字段 | 说明 |
+|------|------|
+| `id` | 唯一标识 |
+| `label` | 菜单文字（`&` 为快捷键） |
+| `verb` | 命令动词，供程序化调用 |
+| `helpText` | 状态栏帮助文字 |
+| `canonicalName` | 规范动词名 |
+| `separatorAfter` | 此项后插入分隔线 |
+| `extensions` | 允许的扩展名，如 `[".cpp"]`；`[]` 表示不限制 |
+| `excludeExtensions` | 排除的扩展名 |
+| `minSelection` | 最少选中数量（默认 `1`） |
+| `maxSelection` | 最多选中数量；`0` 表示不限 |
+| `filesOnly` | 仅文件（默认 `true`） |
+| `foldersOnly` | 仅文件夹 / 文件夹背景 |
+| `actionType` | `messageBox` 或 `launch` |
+| `actionTitle` | 对话框标题（`messageBox`） |
+| `actionTemplate` | 对话框正文模板（`messageBox`） |
+| `actionCommand` | 命令行（`launch`） |
+| `actionShowWindow` | 启动时显示窗口（默认 `false`） |
 
-### Placeholders
+### 占位符
 
-| Token | Meaning |
-|-------|---------|
-| `%1` | First selected path, or current folder if none |
-| `%*` | All selected paths (quoted, space-separated) |
-| `%D` | Parent directory |
+| 符号 | 含义 |
+|------|------|
+| `%1` | 第一个选中路径；无选中时为当前文件夹 |
+| `%*` | 所有选中路径（带引号、空格分隔） |
+| `%D` | 父目录 |
 
-If `menu.json` is missing or invalid, the extension falls back to built-in items in `include/shell_ext/common.h`.
+若 `menu.json` 缺失或无效，扩展会回退到 `include/shell_ext/common.h` 中的内置项。
 
-## COM identity
+## COM 标识
 
-When shipping your own fork, change:
+发布自己的 Fork 时，请修改：
 
-1. `CLSID_FileContextMenuExt` in `src/extension/dllmain.cpp`
-2. `L_Friendly_Class_Name` and `L_Friendly_Menu_Name` in `include/shell_ext/common.h`
+1. `src/extension/dllmain.cpp` 中的 `CLSID_FileContextMenuExt`
+2. `include/shell_ext/common.h` 中的 `L_Friendly_Class_Name` 与 `L_Friendly_Menu_Name`
 
-## Debugging
+## 调试
 
-Logs use prefix `[ShellExt]` via `OutputDebugString`. Use [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview).
+日志前缀为 `[ShellExt]`，通过 `OutputDebugString` 输出。可使用 [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview) 查看。
 
-## Notes
+## 注意事项
 
-- **Bitness:** 64-bit Explorer requires a 64-bit DLL
-- **Admin:** COM registration needs elevation
-- **Regenerate:** Re-run `generate-vs.ps1` after `CMakeLists.txt` changes
-- **Explorer cache:** Unregister/re-register after DLL changes; restart Explorer if needed
+- **位数：** 64 位 Explorer 需要 64 位 DLL
+- **权限：** COM 注册需要提升权限
+- **重新生成：** 修改 `CMakeLists.txt` 后请重新运行 `generate-vs.ps1`
+- **Explorer 缓存：** 更新 DLL 后请注销/重新注册；必要时重启 Explorer
 
-## Architecture (overview)
+## 架构概览
 
 ```
-Right-click in Explorer
+资源管理器右键
   → IShellExtInit::Initialize
   → IContextMenu::QueryContextMenu
   → IContextMenu::InvokeCommand
 ```
 
-Shell COM glue stays thin; most customization is `config/menu.json` plus optional gates/executors. Details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+Shell COM 层保持精简；多数定制通过 `config/menu.json` 及可选的 gate/executor 完成。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
 
-## License
+## 许可证
 
-Derived from the Microsoft sample ([Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)). Original Microsoft copyright headers remain in source files.
+派生自微软示例（[Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)）。源文件中保留微软原始版权头。
