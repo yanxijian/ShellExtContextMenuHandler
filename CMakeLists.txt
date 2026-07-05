@@ -19,6 +19,10 @@ set(SHELL_EXT_SOURCES
     src/context/ContextBuilder.cpp
     src/gates/GateRegistry.cpp
     src/gates/JsonFilterGate.cpp
+    src/actions/ActionPlaceholders.cpp
+    src/actions/ExecutorRegistry.cpp
+    src/actions/MessageBoxExecutor.cpp
+    src/actions/LaunchExecutor.cpp
     src/menu/MenuActionHandler.cpp
     src/menu/MenuConfig.cpp
     src/menu/MenuProvider.cpp
@@ -41,6 +45,7 @@ target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src/extension
     ${CMAKE_CURRENT_SOURCE_DIR}/src/context
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gates
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/actions
     ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
     ${CMAKE_CURRENT_SOURCE_DIR}/src/registry
     ${CMAKE_CURRENT_SOURCE_DIR}/src/resources
