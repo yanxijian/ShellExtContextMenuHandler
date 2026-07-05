@@ -1,12 +1,69 @@
 #include "MenuConfig.h"
 #include "common.h"
 #include "ShellLog.h"
-#include <fstream>
 #include <sstream>
+#include <vector>
 #include <windows.h>
 
 namespace
 {
+    bool ReadUtf8File(const std::wstring& path, std::wstring& content)
+    {
+        FILE* file = nullptr;
+        if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr)
+        {
+            return false;
+        }
+
+        if (fseek(file, 0, SEEK_END) != 0)
+        {
+            fclose(file);
+            return false;
+        }
+
+        const long fileSize = ftell(file);
+        if (fileSize < 0)
+        {
+            fclose(file);
+            return false;
+        }
+
+        if (fseek(file, 0, SEEK_SET) != 0)
+        {
+            fclose(file);
+            return false;
+        }
+
+        std::vector<char> bytes(static_cast<size_t>(fileSize));
+        if (fileSize > 0
+            && fread(bytes.data(), 1, static_cast<size_t>(fileSize), file) != static_cast<size_t>(fileSize))
+        {
+            fclose(file);
+            return false;
+        }
+
+        fclose(file);
+
+        if (bytes.empty())
+        {
+            content.clear();
+            return true;
+        }
+
+        const int wideLength = MultiByteToWideChar(
+            CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
+        if (wideLength <= 0)
+        {
+            return false;
+        }
+
+        std::vector<wchar_t> wideBuffer(static_cast<size_t>(wideLength));
+        MultiByteToWideChar(
+            CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), wideBuffer.data(), wideLength);
+        content.assign(wideBuffer.begin(), wideBuffer.end());
+        return true;
+    }
+
     void Trim(std::wstring& value)
     {
         const wchar_t* whitespace = L" \t\r\n";
@@ -309,17 +366,14 @@ std::vector<MenuItemDef> GetBuiltinMenuItems()
 
 bool LoadMenuConfig(const std::wstring& configPath, std::vector<MenuItemDef>& items)
 {
-    std::wifstream stream(configPath);
-    if (!stream.is_open())
+    std::wstring json;
+    if (!ReadUtf8File(configPath, json))
     {
         ShellLog(L"Config not found, using built-in menu: %s", configPath.c_str());
         items = GetBuiltinMenuItems();
         return false;
     }
 
-    std::wstringstream buffer;
-    buffer << stream.rdbuf();
-    const std::wstring json = buffer.str();
     if (!ParseMenuItemsArray(json, items))
     {
         ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());

@@ -1,0 +1,52 @@
+{
+  "menuItems": [
+    {
+      "id": "display-file-name",
+      "label": "&Display File Name (C++)",
+      "verb": "cppdisplay",
+      "helpText": "Display File Name (C++)",
+      "canonicalName": "CppDisplayFileName",
+      "separatorAfter": true,
+      "extensions": [".cpp"],
+      "minSelection": 1,
+      "maxSelection": 0,
+      "filesOnly": true,
+      "foldersOnly": false,
+      "actionType": "messageBox",
+      "actionTitle": "CppShellExtContextMenuHandler.FileContextMenuExt",
+      "actionTemplate": "The selected file is:\r\n\r\n%1"
+    },
+    {
+      "id": "open-in-notepad",
+      "label": "Open in &Notepad",
+      "verb": "opennotepad",
+      "helpText": "Open selected file in Notepad",
+      "canonicalName": "OpenInNotepad",
+      "separatorAfter": false,
+      "extensions": [".cpp", ".h", ".txt"],
+      "minSelection": 1,
+      "maxSelection": 1,
+      "filesOnly": true,
+      "foldersOnly": false,
+      "actionType": "launch",
+      "actionCommand": "notepad.exe %1",
+      "actionShowWindow": true
+    },
+    {
+      "id": "display-folder-path",
+      "label": "Display &Folder Path",
+      "verb": "folderdisplay",
+      "helpText": "Display current folder path",
+      "canonicalName": "DisplayFolderPath",
+      "separatorAfter": true,
+      "extensions": [],
+      "minSelection": 0,
+      "maxSelection": 0,
+      "filesOnly": false,
+      "foldersOnly": true,
+      "actionType": "messageBox",
+      "actionTitle": "Folder",
+      "actionTemplate": "Current folder:\r\n\r\n%D"
+    }
+  ]
+}
