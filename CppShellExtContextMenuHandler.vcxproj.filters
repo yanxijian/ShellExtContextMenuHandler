@@ -28,6 +28,12 @@
       <Filter>Resource Files</Filter>
     </None>
     <None Include="ReadMe.md" />
+    <None Include="config\menu.json">
+      <Filter>Config</Filter>
+    </None>
+    <None Include="tools\register.ps1">
+      <Filter>Tools</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
