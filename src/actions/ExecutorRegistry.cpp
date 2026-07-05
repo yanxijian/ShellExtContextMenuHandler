@@ -1,4 +1,5 @@
 #include "ExecutorRegistry.h"
+#include "DemoActionLogExecutor.h"
 #include "LaunchExecutor.h"
 #include "MessageBoxExecutor.h"
 #include "ShellLog.h"
@@ -44,10 +45,27 @@ bool ExecutorRegistry::ExecuteChain(
     const MenuAction& action,
     HWND hwnd) const
 {
-    for (const auto& name : m_chainOrder)
+    return ExecuteChain(context, action, hwnd, m_chainOrder);
+}
+
+bool ExecutorRegistry::ExecuteChain(
+    const MenuContext& context,
+    const MenuAction& action,
+    HWND hwnd,
+    const std::vector<std::wstring>& executorNames) const
+{
+    const std::vector<std::wstring>& chain = executorNames.empty() ? m_chainOrder : executorNames;
+
+    for (const auto& name : chain)
     {
         IActionExecutor* executor = GetExecutor(name);
-        if (executor == nullptr || !executor->CanExecute(action))
+        if (executor == nullptr)
+        {
+            ShellLog(L"Executor not found: %s", name.c_str());
+            continue;
+        }
+
+        if (!executor->CanExecute(action))
         {
             continue;
         }
@@ -56,8 +74,6 @@ bool ExecutorRegistry::ExecuteChain(
         {
             return true;
         }
-
-        ShellLog(L"Executor '%s' declined action after CanExecute matched.", name.c_str());
     }
 
     ShellLog(L"No executor handled action.");
@@ -66,6 +82,9 @@ bool ExecutorRegistry::ExecuteChain(
 
 void ExecutorRegistry::RegisterBuiltInExecutors()
 {
+    RegisterExecutor(
+        L"demo:actionLog",
+        std::unique_ptr<IActionExecutor>(new DemoActionLogExecutor()));
     RegisterExecutor(L"messageBox", std::unique_ptr<IActionExecutor>(new MessageBoxExecutor()));
     RegisterExecutor(L"launch", std::unique_ptr<IActionExecutor>(new LaunchExecutor()));
 }

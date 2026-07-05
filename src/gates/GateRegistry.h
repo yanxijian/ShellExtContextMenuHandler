@@ -1,11 +1,14 @@
 #pragma once
 
+#include "GateTypes.h"
 #include "IExtensionGate.h"
 #include "IMenuItemGate.h"
 #include "IMenuItemPresentationGate.h"
+#include "MenuItem.h"
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 class GateRegistry
 {
@@ -24,10 +27,24 @@ public:
     IMenuItemGate* DefaultItemGate() const;
     IMenuItemPresentationGate* DefaultPresentationGate() const;
 
+    bool EvaluateExtensionChain(
+        const MenuContext& context,
+        const std::vector<std::wstring>& gateNames) const;
+    bool EvaluateItemChain(
+        const MenuContext& context,
+        const MenuItemDef& item,
+        const std::vector<std::wstring>& gateNames) const;
+    MenuItemState EvaluatePresentationChain(
+        const MenuContext& context,
+        const MenuItemDef& item,
+        const std::vector<std::wstring>& gateNames) const;
+
     void RegisterBuiltInGates();
 
 private:
     GateRegistry() = default;
+
+    static std::wstring ResolveGateName(const std::wstring& spec);
 
     std::unordered_map<std::wstring, std::unique_ptr<IExtensionGate>> m_extensionGates;
     std::unordered_map<std::wstring, std::unique_ptr<IMenuItemGate>> m_itemGates;

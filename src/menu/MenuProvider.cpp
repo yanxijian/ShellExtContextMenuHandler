@@ -1,7 +1,7 @@
 #include "MenuProvider.h"
 #include "ContextBuilder.h"
+#include "ExecutorRegistry.h"
 #include "GateRegistry.h"
-#include "MenuActionHandler.h"
 #include "MenuConfig.h"
 #include "ShellLog.h"
 #include <Shlwapi.h>
@@ -34,35 +34,35 @@ void MenuProvider::EnsureConfigLoaded()
         return;
     }
 
+    MenuConfigDocument document;
     if (m_configPath.empty())
     {
-        m_allItems = GetBuiltinMenuItems();
+        document.items = GetBuiltinMenuItems();
+        ApplyDefaultMenuGateChains(document.globalChains);
     }
     else
     {
-        LoadMenuConfig(m_configPath, m_allItems);
+        LoadMenuConfigDocument(m_configPath, document);
     }
 
+    m_globalChains = document.globalChains;
+    m_allItems = document.items;
     m_configLoaded = true;
 }
 
-bool MenuProvider::EvaluateItemGate(const MenuContext& context, const MenuItemDef& item) const
+const std::vector<std::wstring>& MenuProvider::ResolveItemGates(const MenuItemDef& item) const
 {
-    IMenuItemGate* gate = GateRegistry::Instance().DefaultItemGate();
-    return gate != nullptr && gate->ShouldShow(context, item);
+    return item.itemGates.empty() ? m_globalChains.itemGates : item.itemGates;
 }
 
-MenuItemState MenuProvider::EvaluatePresentationGate(
-    const MenuContext& context,
-    const MenuItemDef& item) const
+const std::vector<std::wstring>& MenuProvider::ResolvePresentationGates(const MenuItemDef& item) const
 {
-    IMenuItemPresentationGate* gate = GateRegistry::Instance().DefaultPresentationGate();
-    if (gate == nullptr)
-    {
-        return MenuItemState::Enabled;
-    }
+    return item.presentationGates.empty() ? m_globalChains.presentationGates : item.presentationGates;
+}
 
-    return gate->Evaluate(context, item);
+const std::vector<std::wstring>& MenuProvider::ResolveExecutors(const MenuItemDef& item) const
+{
+    return item.executors.empty() ? m_globalChains.executors : item.executors;
 }
 
 HRESULT MenuProvider::Initialize(
@@ -79,17 +79,20 @@ HRESULT MenuProvider::Initialize(
         return E_FAIL;
     }
 
-    IExtensionGate* extensionGate = GateRegistry::Instance().DefaultExtensionGate();
-    if (extensionGate == nullptr || !extensionGate->ShouldActivate(m_context))
+    EnsureConfigLoaded();
+
+    if (!GateRegistry::Instance().EvaluateExtensionChain(m_context, m_globalChains.extensionGates))
     {
-        ShellLog(L"Extension gate rejected current context.");
+        ShellLog(L"Extension gate chain rejected current context.");
         return E_FAIL;
     }
 
-    EnsureConfigLoaded();
     for (const auto& item : m_allItems)
     {
-        if (EvaluateItemGate(m_context, item))
+        if (GateRegistry::Instance().EvaluateItemChain(
+                m_context,
+                item,
+                ResolveItemGates(item)))
         {
             m_candidateItems.push_back(item);
         }
@@ -115,7 +118,10 @@ void MenuProvider::BuildInsertedItems(std::vector<InsertedMenuItem>& insertedIte
 
     for (const auto& candidate : m_candidateItems)
     {
-        const MenuItemState state = EvaluatePresentationGate(m_context, candidate);
+        const MenuItemState state = GateRegistry::Instance().EvaluatePresentationChain(
+            m_context,
+            candidate,
+            ResolvePresentationGates(candidate));
         if (state == MenuItemState::Hidden)
         {
             continue;
@@ -168,5 +174,9 @@ void MenuProvider::ExecuteItem(const InsertedMenuItem& item, HWND hwnd) const
         return;
     }
 
-    ExecuteMenuAction(item.item.action, m_context, hwnd);
+    ExecutorRegistry::Instance().ExecuteChain(
+        m_context,
+        item.item.action,
+        hwnd,
+        ResolveExecutors(item.item));
 }

@@ -4,6 +4,7 @@
 #include <shlobj.h>
 #include "InsertedMenuItem.h"
 #include "MenuContext.h"
+#include "MenuGateChains.h"
 #include "MenuItem.h"
 #include <vector>
 
@@ -28,11 +29,13 @@ public:
 
 private:
     void EnsureConfigLoaded();
-    bool EvaluateItemGate(const MenuContext& context, const MenuItemDef& item) const;
-    MenuItemState EvaluatePresentationGate(const MenuContext& context, const MenuItemDef& item) const;
+    const std::vector<std::wstring>& ResolveItemGates(const MenuItemDef& item) const;
+    const std::vector<std::wstring>& ResolvePresentationGates(const MenuItemDef& item) const;
+    const std::vector<std::wstring>& ResolveExecutors(const MenuItemDef& item) const;
 
     HINSTANCE m_moduleInstance;
     std::wstring m_configPath;
+    MenuGateChains m_globalChains;
     std::vector<MenuItemDef> m_allItems;
     std::vector<MenuItemDef> m_candidateItems;
     std::vector<InsertedMenuItem> m_insertedItems;

@@ -40,4 +40,9 @@ struct MenuItemDef
     bool separatorAfter = false;
     MenuFilter filter;
     MenuAction action;
+
+    std::vector<std::wstring> extensionGates;
+    std::vector<std::wstring> itemGates;
+    std::vector<std::wstring> presentationGates;
+    std::vector<std::wstring> executors;
 };

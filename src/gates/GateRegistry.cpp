@@ -1,5 +1,8 @@
 #include "GateRegistry.h"
+#include "DemoHideTempItemGate.h"
+#include "DemoReadOnlyPresentationGate.h"
 #include "JsonFilterGate.h"
+#include "ShellLog.h"
 #include <windows.h>
 
 namespace
@@ -38,7 +41,21 @@ GateRegistry& GateRegistry::Instance()
     return registry;
 }
 
-void GateRegistry::RegisterExtensionGate(const std::wstring& name, std::unique_ptr<IExtensionGate> gate)
+std::wstring GateRegistry::ResolveGateName(const std::wstring& spec)
+{
+    const std::wstring customPrefix = L"custom:";
+    if (spec.size() > customPrefix.size()
+        && _wcsnicmp(spec.c_str(), customPrefix.c_str(), static_cast<int>(customPrefix.size())) == 0)
+    {
+        return spec.substr(customPrefix.size());
+    }
+
+    return spec;
+}
+
+void GateRegistry::RegisterExtensionGate(
+    const std::wstring& name,
+    std::unique_ptr<IExtensionGate> gate)
 {
     m_extensionGates[name] = std::move(gate);
 }
@@ -88,11 +105,117 @@ IMenuItemPresentationGate* GateRegistry::DefaultPresentationGate() const
     return GetPresentationGate(L"presentationPass");
 }
 
+bool GateRegistry::EvaluateExtensionChain(
+    const MenuContext& context,
+    const std::vector<std::wstring>& gateNames) const
+{
+    if (gateNames.empty())
+    {
+        IExtensionGate* gate = DefaultExtensionGate();
+        return gate != nullptr && gate->ShouldActivate(context);
+    }
+
+    for (const auto& name : gateNames)
+    {
+        IExtensionGate* gate = GetExtensionGate(ResolveGateName(name));
+        if (gate == nullptr)
+        {
+            ShellLog(L"Extension gate not found: %s", name.c_str());
+            continue;
+        }
+
+        if (!gate->ShouldActivate(context))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool GateRegistry::EvaluateItemChain(
+    const MenuContext& context,
+    const MenuItemDef& item,
+    const std::vector<std::wstring>& gateNames) const
+{
+    if (gateNames.empty())
+    {
+        IMenuItemGate* gate = DefaultItemGate();
+        return gate != nullptr && gate->ShouldShow(context, item);
+    }
+
+    for (const auto& name : gateNames)
+    {
+        IMenuItemGate* gate = GetItemGate(ResolveGateName(name));
+        if (gate == nullptr)
+        {
+            ShellLog(L"Item gate not found: %s", name.c_str());
+            continue;
+        }
+
+        if (!gate->ShouldShow(context, item))
+        {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+MenuItemState GateRegistry::EvaluatePresentationChain(
+    const MenuContext& context,
+    const MenuItemDef& item,
+    const std::vector<std::wstring>& gateNames) const
+{
+    if (gateNames.empty())
+    {
+        IMenuItemPresentationGate* gate = DefaultPresentationGate();
+        if (gate == nullptr)
+        {
+            return MenuItemState::Enabled;
+        }
+
+        return gate->Evaluate(context, item);
+    }
+
+    MenuItemState state = MenuItemState::Enabled;
+    for (const auto& name : gateNames)
+    {
+        IMenuItemPresentationGate* gate = GetPresentationGate(ResolveGateName(name));
+        if (gate == nullptr)
+        {
+            ShellLog(L"Presentation gate not found: %s", name.c_str());
+            continue;
+        }
+
+        const MenuItemState gateState = gate->Evaluate(context, item);
+        if (gateState == MenuItemState::Hidden)
+        {
+            return MenuItemState::Hidden;
+        }
+
+        if (gateState == MenuItemState::Disabled)
+        {
+            state = MenuItemState::Disabled;
+        }
+    }
+
+    return state;
+}
+
 void GateRegistry::RegisterBuiltInGates()
 {
-    RegisterExtensionGate(L"extensionPass", std::unique_ptr<IExtensionGate>(new PassthroughExtensionGate()));
+    RegisterExtensionGate(
+        L"extensionPass",
+        std::unique_ptr<IExtensionGate>(new PassthroughExtensionGate()));
     RegisterItemGate(L"jsonFilter", std::unique_ptr<IMenuItemGate>(new JsonFilterGate()));
     RegisterPresentationGate(
         L"presentationPass",
         std::unique_ptr<IMenuItemPresentationGate>(new PassthroughPresentationGate()));
+    RegisterItemGate(
+        L"demo:hideTemp",
+        std::unique_ptr<IMenuItemGate>(new DemoHideTempItemGate()));
+    RegisterPresentationGate(
+        L"demo:readOnlyDisable",
+        std::unique_ptr<IMenuItemPresentationGate>(new DemoReadOnlyPresentationGate()));
 }

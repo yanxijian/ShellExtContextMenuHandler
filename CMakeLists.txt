@@ -19,10 +19,13 @@ set(SHELL_EXT_SOURCES
     src/context/ContextBuilder.cpp
     src/gates/GateRegistry.cpp
     src/gates/JsonFilterGate.cpp
+    src/gates/DemoHideTempItemGate.cpp
+    src/gates/DemoReadOnlyPresentationGate.cpp
     src/actions/ActionPlaceholders.cpp
     src/actions/ExecutorRegistry.cpp
     src/actions/MessageBoxExecutor.cpp
     src/actions/LaunchExecutor.cpp
+    src/actions/DemoActionLogExecutor.cpp
     src/platform/OsVersion.cpp
     src/platform/DpiProvider.cpp
     src/icons/IconBitmapUtils.cpp
@@ -32,6 +35,7 @@ set(SHELL_EXT_SOURCES
     src/icons/DefaultResourceIconProvider.cpp
     src/menu/MenuActionHandler.cpp
     src/menu/MenuConfig.cpp
+    src/menu/MenuGateChains.cpp
     src/menu/MenuProvider.cpp
     src/menu/PathHelpers.cpp
     src/menu/ShellLog.cpp

@@ -14,6 +14,11 @@ public:
     void RegisterExecutor(const std::wstring& name, std::unique_ptr<IActionExecutor> executor);
     IActionExecutor* GetExecutor(const std::wstring& name) const;
     bool ExecuteChain(const MenuContext& context, const MenuAction& action, HWND hwnd) const;
+    bool ExecuteChain(
+        const MenuContext& context,
+        const MenuAction& action,
+        HWND hwnd,
+        const std::vector<std::wstring>& executorNames) const;
 
     void RegisterBuiltInExecutors();
 

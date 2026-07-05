@@ -1,4 +1,5 @@
 #include "MenuConfig.h"
+#include "MenuGateChains.h"
 #include "common.h"
 #include "ShellLog.h"
 #include <sstream>
@@ -259,6 +260,15 @@ namespace
         ExtractBoolValue(objectBody, L"filesOnly", item.filter.filesOnly);
         ExtractBoolValue(objectBody, L"foldersOnly", item.filter.foldersOnly);
 
+        ExtractStringArray(objectBody, L"extensionGates", item.extensionGates);
+        ExtractStringArray(objectBody, L"itemGates", item.itemGates);
+        if (item.itemGates.empty())
+        {
+            ExtractStringArray(objectBody, L"gates", item.itemGates);
+        }
+        ExtractStringArray(objectBody, L"presentationGates", item.presentationGates);
+        ExtractStringArray(objectBody, L"executors", item.executors);
+
         ExtractStringValue(objectBody, L"actionType", actionType);
         ExtractStringValue(objectBody, L"actionTitle", actionTitle);
         ExtractStringValue(objectBody, L"actionTemplate", actionTemplate);
@@ -281,6 +291,18 @@ namespace
         }
 
         return true;
+    }
+
+    void ParseRootChainArrays(const std::wstring& json, MenuGateChains& chains)
+    {
+        ExtractStringArray(json, L"extensionGates", chains.extensionGates);
+        ExtractStringArray(json, L"itemGates", chains.itemGates);
+        if (chains.itemGates.empty())
+        {
+            ExtractStringArray(json, L"gates", chains.itemGates);
+        }
+        ExtractStringArray(json, L"presentationGates", chains.presentationGates);
+        ExtractStringArray(json, L"executors", chains.executors);
     }
 
     bool ParseMenuItemsArray(const std::wstring& json, std::vector<MenuItemDef>& items)
@@ -365,42 +387,66 @@ std::vector<MenuItemDef> GetBuiltinMenuItems()
     return { item };
 }
 
-bool LoadMenuConfig(const std::wstring& configPath, std::vector<MenuItemDef>& items)
+
+bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& document)
 {
     static std::wstring cachedConfigPath;
-    static std::vector<MenuItemDef> cachedItems;
-    static bool hasCachedItems = false;
+    static MenuConfigDocument cachedDocument;
+    static bool hasCachedDocument = false;
+    static bool cachedLoadSucceeded = false;
 
-    if (hasCachedItems && cachedConfigPath == configPath)
+    if (hasCachedDocument && cachedConfigPath == configPath)
     {
-        items = cachedItems;
-        return true;
+        document = cachedDocument;
+        return cachedLoadSucceeded;
     }
+
+    document = {};
+    document.items = GetBuiltinMenuItems();
+    ApplyDefaultMenuGateChains(document.globalChains);
 
     std::wstring json;
     if (!ReadUtf8File(configPath, json))
     {
         ShellLog(L"Config not found, using built-in menu: %s", configPath.c_str());
-        items = GetBuiltinMenuItems();
-        cachedItems = items;
+        cachedDocument = document;
         cachedConfigPath = configPath;
-        hasCachedItems = true;
+        hasCachedDocument = true;
+        cachedLoadSucceeded = false;
         return false;
     }
 
+    ParseRootChainArrays(json, document.globalChains);
+
+    std::vector<MenuItemDef> items;
     if (!ParseMenuItemsArray(json, items))
     {
         ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
-        items = GetBuiltinMenuItems();
-        cachedItems = items;
+        cachedDocument = document;
         cachedConfigPath = configPath;
-        hasCachedItems = true;
+        hasCachedDocument = true;
+        cachedLoadSucceeded = false;
         return false;
     }
 
-    ShellLog(L"Loaded %u menu item(s) from %s", static_cast<UINT>(items.size()), configPath.c_str());
-    cachedItems = items;
+    document.items = items;
+    ApplyDefaultMenuGateChains(document.globalChains);
+
+    ShellLog(
+        L"Loaded %u menu item(s) from %s",
+        static_cast<UINT>(document.items.size()),
+        configPath.c_str());
+    cachedDocument = document;
     cachedConfigPath = configPath;
-    hasCachedItems = true;
+    hasCachedDocument = true;
+    cachedLoadSucceeded = true;
     return true;
+}
+
+bool LoadMenuConfig(const std::wstring& configPath, std::vector<MenuItemDef>& items)
+{
+    MenuConfigDocument document;
+    const bool loaded = LoadMenuConfigDocument(configPath, document);
+    items = document.items;
+    return loaded;
 }

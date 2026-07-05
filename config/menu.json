@@ -1,4 +1,8 @@
 {
+  "extensionGates": ["extensionPass"],
+  "itemGates": ["jsonFilter", "demo:hideTemp"],
+  "presentationGates": ["presentationPass", "demo:readOnlyDisable"],
+  "executors": ["demo:actionLog", "messageBox", "launch"],
   "menuItems": [
     {
       "id": "display-file-name",
