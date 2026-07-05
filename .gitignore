@@ -4,5 +4,14 @@
 
 /.vs
 /Debug
+/x64
+/Win32
+/Release
 *.user
 *.sln
+*.obj
+*.pdb
+*.ilk
+*.exp
+*.lib
+CppShell.*/
