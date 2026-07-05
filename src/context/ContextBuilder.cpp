@@ -1,4 +1,5 @@
 #include "ContextBuilder.h"
+#include "DpiProvider.h"
 #include <ShlObj.h>
 #include <Shlwapi.h>
 #include <stdlib.h>
@@ -116,5 +117,6 @@ bool BuildMenuContext(
     TryReadProgId(hKeyProgID, context.progId);
     TryPopulateFolderPath(pidlFolder, context);
     TryPopulateFromDataObject(dataObject, context);
+    context.systemDpi = DpiProvider::GetSystemDpi();
     return context.GetSelectionCount() > 0 || !context.folderPath.empty();
 }

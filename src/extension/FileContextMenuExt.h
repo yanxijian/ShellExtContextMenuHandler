@@ -23,8 +23,11 @@ protected:
     ~FileContextMenuExt(void);
 
 private:
+    void EnsureMenuBitmap(UINT dpi);
+
     long m_cRef;
     MenuProvider m_menuProvider;
     std::vector<InsertedMenuItem> m_insertedItems;
-    HANDLE m_hMenuBmp;
+    HBITMAP m_hMenuBmp;
+    UINT m_cachedIconDpi;
 };

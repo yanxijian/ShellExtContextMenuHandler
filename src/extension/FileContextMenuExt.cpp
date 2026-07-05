@@ -1,4 +1,5 @@
 #include "FileContextMenuExt.h"
+#include "DpiProvider.h"
 #include "resource.h"
 #include <strsafe.h>
 #include <Shlwapi.h>
@@ -11,12 +12,10 @@ extern long g_cDllRef;
 FileContextMenuExt::FileContextMenuExt(void)
     : m_cRef(1),
     m_menuProvider(g_hInst),
-    m_hMenuBmp(nullptr)
+    m_hMenuBmp(nullptr),
+    m_cachedIconDpi(0)
 {
     InterlockedIncrement(&g_cDllRef);
-
-    m_hMenuBmp = LoadImage(g_hInst, MAKEINTRESOURCE(IDB_OK),
-        IMAGE_BITMAP, 0, 0, LR_DEFAULTSIZE | LR_LOADTRANSPARENT);
 }
 
 FileContextMenuExt::~FileContextMenuExt(void)
@@ -28,6 +27,26 @@ FileContextMenuExt::~FileContextMenuExt(void)
     }
 
     InterlockedDecrement(&g_cDllRef);
+}
+
+void FileContextMenuExt::EnsureMenuBitmap(UINT dpi)
+{
+    if (m_hMenuBmp != nullptr && m_cachedIconDpi == dpi)
+    {
+        return;
+    }
+
+    if (m_hMenuBmp != nullptr)
+    {
+        DeleteObject(m_hMenuBmp);
+        m_hMenuBmp = nullptr;
+    }
+
+    m_hMenuBmp = DpiProvider::LoadMenuBitmapScaled(
+        g_hInst,
+        MAKEINTRESOURCEW(IDB_OK),
+        dpi);
+    m_cachedIconDpi = dpi;
 }
 
 IFACEMETHODIMP FileContextMenuExt::QueryInterface(REFIID riid, void **ppv)
@@ -70,6 +89,9 @@ IFACEMETHODIMP FileContextMenuExt::QueryContextMenu(
     {
         return MAKE_HRESULT(SEVERITY_SUCCESS, 0, USHORT(0));
     }
+
+    const UINT menuDpi = DpiProvider::GetDpiAtCursor();
+    EnsureMenuBitmap(menuDpi);
 
     m_menuProvider.BuildInsertedItems(m_insertedItems);
     if (m_insertedItems.empty())

@@ -21,6 +21,7 @@ struct MenuContext
 
     bool hasFiles = false;
     bool hasFolders = false;
+    UINT systemDpi = 96;
 
     UINT GetSelectionCount() const
     {
