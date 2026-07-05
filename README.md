@@ -12,40 +12,77 @@
 - 支持扩展名、选中数量、文件/文件夹等过滤条件
 - 支持文件夹背景右键（无选中项时读取当前目录）
 - 内置调试日志（`OutputDebugString`，可用 DebugView 查看）
+- **CMake** 构建，可生成 Visual Studio 解决方案
 
 ## 项目结构
 
 ```
-├── config/menu.json          # 菜单配置（构建时复制到输出目录）
-├── tools/register.ps1        # 注册/卸载脚本
-├── FileContextMenuExt.*      # Shell COM 入口（薄封装）
-├── MenuProvider.*            # 上下文构建与命令分发
-├── MenuConfig.*              # JSON 配置加载
-├── Filter.*                  # 过滤规则引擎
-├── MenuActionHandler.*       # 动作执行（弹窗 / 启动进程）
-├── PathHelpers.*             # 路径占位符展开
-├── ShellLog.*                # 调试日志
-├── Reg.*                     # 注册表辅助函数
-└── common.h                  # COM 注册用名称常量
+├── CMakeLists.txt                 # 构建入口（单一事实来源）
+├── config/
+│   └── menu.json                  # 菜单配置
+├── include/
+│   └── shell_ext/
+│       └── common.h               # COM 注册用名称常量
+├── src/
+│   ├── extension/                 # Shell COM 入口
+│   │   ├── dllmain.cpp
+│   │   ├── ClassFactory.*
+│   │   └── FileContextMenuExt.*
+│   ├── menu/                      # 菜单引擎
+│   │   ├── MenuProvider.*
+│   │   ├── MenuConfig.*
+│   │   ├── Filter.*
+│   │   ├── MenuActionHandler.*
+│   │   ├── PathHelpers.*
+│   │   └── ShellLog.*
+│   ├── registry/                  # 注册表辅助
+│   │   └── Reg.*
+│   └── resources/                 # 资源与模块导出
+│       ├── ShellExtContextMenuHandler.rc
+│       ├── GlobalExportFunctions.def
+│       ├── resource.h
+│       └── OK.bmp
+├── tools/
+│   ├── generate-vs.ps1            # 由 CMake 生成 VS 工程
+│   └── register.ps1               # 注册/卸载脚本
+└── build/                         # 生成目录（git 忽略）
+    ├── ShellExtContextMenuHandler.slnx   # VS 2026 解决方案
+    ├── CppShellExtContextMenuHandler.vcxproj
+    └── bin/Release/*.dll
 ```
 
 ## 快速开始
 
-### 1. 构建
-
-使用 Visual Studio 打开 `CppShellExtContextMenuHandler.vcxproj`，选择 **x64** 配置（64 位 Windows 必须使用 x64 DLL），然后编译。
-
-命令行构建示例：
+### 1. 生成 Visual Studio 工程
 
 ```powershell
-msbuild CppShellExtContextMenuHandler.vcxproj /p:Configuration=Release /p:Platform=x64
+.\tools\generate-vs.ps1
 ```
 
-构建完成后，`menu.json` 会自动复制到输出目录（如 `x64\Release\`）。
+这会在 `build/` 目录生成 `ShellExtContextMenuHandler.slnx`（VS 2026 格式）及 `CppShellExtContextMenuHandler.vcxproj`。可直接用 Visual Studio 打开该解决方案。
 
-### 2. 注册
+也可手动执行：
 
-**方式 A：PowerShell 脚本（推荐）**
+```powershell
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+```
+
+### 2. 构建
+
+**命令行：**
+
+```powershell
+cmake --build build --config Release
+```
+
+**Visual Studio：** 打开 `build/ShellExtContextMenuHandler.slnx`，选择 `Release | x64` 后编译。
+
+构建产物位于 `build/bin/Release/`：
+
+- `CppShellExtContextMenuHandler.dll`
+- `menu.json`（自动复制）
+
+### 3. 注册
 
 以管理员身份运行：
 
@@ -59,17 +96,11 @@ msbuild CppShellExtContextMenuHandler.vcxproj /p:Configuration=Release /p:Platfo
 .\tools\register.ps1 -Action unregister
 ```
 
-**方式 B：regsvr32**
+> `register.ps1` 会自动在 `build/bin/Release/` 等常见输出路径中查找 DLL，并将 `config/menu.json` 复制到 DLL 同目录。
 
-```powershell
-regsvr32.exe x64\Release\CppShellExtContextMenuHandler.dll
-```
+### 4. 验证
 
-> 确保 `menu.json` 与 DLL 位于同一目录。使用 `register.ps1` 时会自动复制配置文件。
-
-### 3. 验证
-
-在资源管理器中右键 `.cpp` 文件，应看到配置中的菜单项。修改 `config/menu.json` 后重新构建并复制配置，然后重启 Explorer 或重新注册扩展。
+在资源管理器中右键 `.cpp` 文件，应看到配置中的菜单项。
 
 ## 定制菜单
 
@@ -97,70 +128,42 @@ regsvr32.exe x64\Release\CppShellExtContextMenuHandler.dll
 
 ### 占位符
 
-在 `actionTemplate` 和 `actionCommand` 中可使用：
-
 | 占位符 | 含义 |
 |--------|------|
 | `%1` | 第一个选中路径；无选中时为当前文件夹 |
 | `%*` | 所有选中路径（带引号、空格分隔） |
 | `%D` | 所在目录路径 |
 
-### 配置示例
-
-```json
-{
-  "menuItems": [
-    {
-      "id": "open-in-notepad",
-      "label": "Open in &Notepad",
-      "verb": "opennotepad",
-      "extensions": [".txt", ".cpp"],
-      "minSelection": 1,
-      "maxSelection": 1,
-      "actionType": "launch",
-      "actionCommand": "notepad.exe %1",
-      "actionShowWindow": true
-    }
-  ]
-}
-```
-
-若 `menu.json` 缺失或解析失败，扩展会回退到 `common.h` 中定义的内置菜单项。
+若 `menu.json` 缺失或解析失败，扩展会回退到 `include/shell_ext/common.h` 中定义的内置菜单项。
 
 ## 修改 COM 身份信息
 
 发布自己的扩展时，请修改：
 
-1. `dllmain.cpp` 中的 `CLSID_FileContextMenuExt`（使用 Visual Studio「创建 GUID」工具生成新值）
-2. `common.h` 中的 `L_Friendly_Class_Name` 和 `L_Friendly_Menu_Name`
+1. `src/extension/dllmain.cpp` 中的 `CLSID_FileContextMenuExt`
+2. `include/shell_ext/common.h` 中的 `L_Friendly_Class_Name` 和 `L_Friendly_Menu_Name`
 
 ## 调试
 
 扩展通过 `OutputDebugString` 输出日志，前缀为 `[ShellExt]`。推荐用 [DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview) 查看。
 
-常见日志：
-
-- 配置加载成功/失败
-- 当前上下文无可见菜单项
-- `CreateProcess` 失败
-
 ## 注意事项
 
 - **位数匹配**：64 位 Windows 的 Explorer 只能加载 x64 DLL
 - **管理员权限**：注册 COM 组件需要提升权限
-- **性能**：避免在 `Initialize` / `QueryContextMenu` 中执行耗时操作；耗时任务应通过 `launch` 启动外部进程
+- **重新生成工程**：修改 `CMakeLists.txt` 后重新运行 `generate-vs.ps1`
 - **Explorer 缓存**：修改 DLL 后建议注销再注册，必要时重启 Explorer
 
 ## 架构说明
 
 ```
 Explorer 右键
-    → IShellExtInit::Initialize   （解析选中项，过滤菜单）
+    → IShellExtInit::Initialize        （解析选中项，过滤菜单）
     → IContextMenu::QueryContextMenu （插入可见项）
     → IContextMenu::InvokeCommand    （按 verb/offset 分发动作）
 ```
 
-核心逻辑与 Shell COM 胶水代码分离：定制时只需改 `config/menu.json`（及可选的 `common.h` 回退项），不必改动 `FileContextMenuExt` 的接口实现。
+核心逻辑与 Shell COM 胶水代码分离：定制时只需改 `config/menu.json`（及可选的 `common.h` 回退项）。
 
 ## 许可证
 

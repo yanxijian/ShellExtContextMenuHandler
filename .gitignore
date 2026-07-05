@@ -1,17 +1,46 @@
 ﻿################################################################################
-# This .gitignore file was automatically created by Microsoft(R) Visual Studio.
+# Build outputs
 ################################################################################
 
 /.vs
-/Debug
+/build
+/out
 /x64
 /Win32
+/Debug
 /Release
 *.user
+CppShell.*/
+cmake-build-*/
+
+################################################################################
+# CMake / Visual Studio generated files
+################################################################################
+
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+install_manifest.txt
 *.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.suo
+*.opensdf
+*.sdf
+*.VC.db
+*.VC.opendb
+ipch/
+
+################################################################################
+# Compiler artifacts
+################################################################################
+
 *.obj
 *.pdb
 *.ilk
 *.exp
 *.lib
-CppShell.*/
+*.iobj
+*.ipdb
+*.tlog

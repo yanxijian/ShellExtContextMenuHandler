@@ -1,0 +1,79 @@
+cmake_minimum_required(VERSION 3.20)
+
+project(ShellExtContextMenuHandler
+    VERSION 1.0.0
+    DESCRIPTION "Configurable Windows Explorer context menu shell extension"
+    LANGUAGES CXX RC
+)
+
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+set(TARGET_NAME CppShellExtContextMenuHandler)
+
+set(SHELL_EXT_SOURCES
+    src/extension/dllmain.cpp
+    src/extension/ClassFactory.cpp
+    src/extension/FileContextMenuExt.cpp
+    src/menu/Filter.cpp
+    src/menu/MenuActionHandler.cpp
+    src/menu/MenuConfig.cpp
+    src/menu/MenuProvider.cpp
+    src/menu/PathHelpers.cpp
+    src/menu/ShellLog.cpp
+    src/registry/Reg.cpp
+)
+
+add_library(${TARGET_NAME} SHARED ${SHELL_EXT_SOURCES})
+
+set_target_properties(${TARGET_NAME} PROPERTIES
+    OUTPUT_NAME ${TARGET_NAME}
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin"
+    ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
+)
+
+target_include_directories(${TARGET_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/shell_ext
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/extension
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/menu
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/registry
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/resources
+)
+
+target_compile_definitions(${TARGET_NAME} PRIVATE
+    UNICODE
+    _UNICODE
+    WIN32
+    _WINDOWS
+    _USRDLL
+    CPPSHELLEXTCONTEXTMENUHANDLER_EXPORTS
+)
+
+target_sources(${TARGET_NAME} PRIVATE
+    src/resources/ShellExtContextMenuHandler.rc
+)
+
+if(MSVC)
+    target_compile_options(${TARGET_NAME} PRIVATE /W3)
+    target_link_options(${TARGET_NAME} PRIVATE
+        "/DEF:${CMAKE_CURRENT_SOURCE_DIR}/src/resources/GlobalExportFunctions.def"
+    )
+endif()
+
+target_link_libraries(${TARGET_NAME} PRIVATE Shlwapi)
+
+add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/menu.json"
+        "$<TARGET_FILE_DIR:${TARGET_NAME}>/menu.json"
+    COMMENT "Copying menu.json to output directory"
+)
+
+install(TARGETS ${TARGET_NAME}
+    RUNTIME DESTINATION .
+    LIBRARY DESTINATION .
+)
+
+install(FILES config/menu.json DESTINATION .)

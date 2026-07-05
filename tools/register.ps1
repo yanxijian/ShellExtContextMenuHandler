@@ -11,10 +11,12 @@ $ErrorActionPreference = "Stop"
 function Get-DefaultDllPath {
     $repoRoot = Split-Path -Parent $PSScriptRoot
     $candidates = @(
+        (Join-Path $repoRoot "build\bin\Release\CppShellExtContextMenuHandler.dll"),
+        (Join-Path $repoRoot "build\Release\CppShellExtContextMenuHandler.dll"),
+        (Join-Path $repoRoot "build\bin\Debug\CppShellExtContextMenuHandler.dll"),
+        (Join-Path $repoRoot "build\Debug\CppShellExtContextMenuHandler.dll"),
         (Join-Path $repoRoot "x64\Release\CppShellExtContextMenuHandler.dll"),
-        (Join-Path $repoRoot "Release\CppShellExtContextMenuHandler.dll"),
-        (Join-Path $repoRoot "x64\Debug\CppShellExtContextMenuHandler.dll"),
-        (Join-Path $repoRoot "Debug\CppShellExtContextMenuHandler.dll")
+        (Join-Path $repoRoot "Release\CppShellExtContextMenuHandler.dll")
     )
 
     foreach ($candidate in $candidates) {
