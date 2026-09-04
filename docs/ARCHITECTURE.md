@@ -2,202 +2,181 @@
 
 **简体中文** | [English](ARCHITECTURE.en.md)
 
-**设计目标：** Windows 7 SP1 及之后（x86 / x64 Explorer）
+## 设计边界
 
-本文档为架构基线。Win7 支持是**设计与验证目标**；发布前须在 Win7 SP1 x64 虚拟机完成手动回归（见下文验证清单）。
+本项目是一个 Windows Explorer `IContextMenu` Shell 扩展，设计目标为 Windows 7 SP1 及之后版本。COM DLL 负责上下文菜单生命周期；JSON 负责可变配置；C++ 负责 Gate、Executor、Shell 目标识别和注册表生命周期。
 
-## 目标
+## 运行时流程
 
-- 可供 Fork 的高级 Shell 右键菜单 Demo
-- 仅以 `IContextMenu` 为必需集成路径（Win7 至 Win11）
-- 可插拔 Gate 实现分层可见性判断
-- JSON 配置菜单规则与 Gate/Executor 链路，C++ 实现复杂逻辑
-- 可插拔动作执行器链（`ExecutorRegistry`）
-- SVG 光栅化图标 + DPI 感知回退（`IconProviderRegistry`）
+```text
+Explorer 调用 IShellExtInit::Initialize
+  -> ContextBuilder 构建 MenuContext
+     - 选中路径、文件名、扩展名、属性、ProgID
+     - ShellTargetType：file / directory / directoryBackground / drive / fileSystemObject
+  -> Gate 1：全局 extensionGates
+  -> 逐项目标匹配和 Gate 2：itemGates
+  -> candidateItems
 
-## 非目标
+Explorer 调用 IContextMenu::QueryContextMenu
+  -> Gate 3：presentationGates
+  -> Hidden 不插入，Disabled 插入但禁用，Enabled 正常插入
+  -> 为 insertedItems 分配命令 ID
+  -> IconProviderRegistry 按 SVG/BMP/default 加载图标
 
-- 以 Win11 精简菜单 / `IExplorerCommand` 为主路径（见路线图附录）
-- 仅用 JSON 表达全部业务规则
-- 在 `Initialize` / `QueryContextMenu` 中做重 IO
-
-## 调用流程
-
-```
-Initialize
-  ContextBuilder（路径、属性、progId — 只解析一次）
-    → Gate 1（全局 extensionGates 链）
-    → Gate 2（逐项 itemGates 链）→ candidateItems
-      （可选：逐项 extensionGates 附加检查）
-    → 无候选项 → E_FAIL
-    → 否则     → S_OK
-
-QueryContextMenu
-  Gate 3（逐项 presentationGates 链）→ insertedItems
-    → Hidden   ：不插入菜单
-    → Disabled ：插入但 MFS_DISABLED
-    → Enabled  ：正常插入
-  仅为 insertedItems 分配 cmd ID
-  加载图标（SVG / BMP / 默认资源，按 DPI 缩放）
-
-InvokeCommand
-  按 offset/verb 映射 insertedItems
-  → Disabled 项不执行
-  → executors 链（按 JSON 或默认顺序）
+Explorer 调用 IContextMenu::InvokeCommand
+  -> 根据命令 offset 或 verb 找到 insertedItem
+  -> Disabled 项不执行
+  -> ExecutorRegistry 按配置顺序执行动作
 ```
 
-## Gate 语义
+Gate 1 没有通过或没有候选项时，扩展返回 `E_FAIL`；Gate 3 只影响当前菜单项的最终显示状态。配置在进程内首次加载后缓存。
 
-| Gate | 时机 | 通过 | 失败 |
-|------|------|------|------|
-| Gate 1 | `Initialize` | 扩展可参与 | `E_FAIL`，不使用本扩展 |
-| Gate 2 | `Initialize` | 项进入 `candidateItems` | 省略该项 |
-| Gate 3 | `QueryContextMenu` | `Enabled` / `Disabled` / `Hidden` | `Hidden` 不插入 |
+## Shell 注册目标
 
-**链式求值：**
+注册配置位于 `config/registration.json`，由 `DllRegisterServer` 读取。目标映射如下：
 
-- Extension / Item：AND，任一失败则拒绝
-- Presentation：`Hidden` > `Disabled` > `Enabled`
-- 名称 `custom:MyGate` 会剥离 `custom:` 前缀；`demo:*` 等保留完整注册名
+| 抽象目标 | 注册位置 | 上下文识别 |
+|----------|----------|------------|
+| `file` | `*` | 仅文件 |
+| `directory` | `Directory` | 仅目录 |
+| `directoryBackground` | `Directory\\Background` | 无选中且存在当前目录 |
+| `drive` | `Drive` | 单个盘符根目录，例如 `C:\\` |
+| `fileSystemObject` | `AllFilesystemObjects` | 同时存在文件和目录的混合选择 |
 
-**重要：** Gate 1 可通过，但 Gate 2 无候选项时，`Initialize` 仍返回 `E_FAIL`。
+`fileSystemObject` 的注册范围是 Windows Shell 的文件系统对象范围，但当前 Demo 菜单只在混合选择上下文显示，避免与单文件 `-F` 和单目录 `-D` 重复。
 
-Gate 1 必须极快（不扫盘、不访问网络）。JSON 配置在进程内首次加载后缓存。
+注册流程：
 
-## MenuContext
+1. 注册 COM `InprocServer32`。
+2. 读取并校验 `registration.json`。
+3. 注册配置中的目标；任一目标失败时回滚本次注册。
+4. 清理已知但未启用的旧目标；清理失败时保留当前注册并记录日志。
+5. 卸载时清理所有已知目标和本项目 CLSID，目标不存在视为成功。
 
-每次右键在 `ContextBuilder` 中构建一次。Gate 只读 `MenuContext`，不得对已解析项再次调用 `GetFileAttributes`。
+缺失 `registration.json` 时默认注册 `file`；存在但无效时注册失败，不静默降级。配置目标必须唯一且属于校验脚本允许的目标集合。
 
-建议检测维度（文档/Fork 示例，Demo 不必全实现）：
+## MenuContext 与目标分类
 
-- 扩展名、ProgID、文件/文件夹名模式
-- 路径前缀、盘符、UNC
-- 选中数量、文件+文件夹混合选中
-- 属性：目录、只读、隐藏、重解析点
-- 文件夹背景（无选中、`folderPath` 有值）
+`ContextBuilder` 每次右键只构建一次 `MenuContext`。选择对象包含完整路径、文件名、扩展名、目录标记和文件属性。
 
-内置 Demo Gate：
+- 无选中且有 `folderPath`：`DirectoryBackground`
+- 仅目录选择：`Directory`；单个盘符根目录进一步识别为 `Drive`
+- 同时有文件和目录：`FileSystemObject`
+- 其余文件选择：`File`
 
-| 名称 | 类型 | 行为 |
-|------|------|------|
-| `demo:hideTemp` | Item | 路径含 `\temp\` 时隐藏该项 |
-| `demo:readOnlyDisable` | Presentation | 只读文件时 Disabled |
-
-## 命令 ID 映射
-
-- `idCmdFirst + offset` 对应 `insertedItems[offset]`
-- 分隔线不占用命令 ID
-- `GetCommandString` 与 `InvokeCommand` 使用同一 `insertedItems` 列表
-- 也支持通过 verb 查找
+Gate 和 Executor 只读取已构建的 `MenuContext`，不应在 Gate 内重复访问文件系统。
 
 ## 配置模型
 
-`config/menu.json` 支持根级与逐项覆盖的链路字段：
+根级链可以被菜单项局部覆盖：
 
 ```json
 {
   "extensionGates": ["extensionPass"],
-  "itemGates": ["jsonFilter", "demo:hideTemp"],
-  "presentationGates": ["presentationPass", "demo:readOnlyDisable"],
-  "executors": ["demo:actionLog", "messageBox", "launch"],
+  "itemGates": ["jsonFilter"],
+  "presentationGates": ["presentationPass"],
+  "executors": ["messageBox"],
   "menuItems": [
     {
       "id": "example",
       "label": "&Example",
       "verb": "example",
+      "targets": ["file"],
       "icon": "icons/example.svg",
-      "itemGates": ["jsonFilter"],
-      "executors": ["messageBox"]
+      "actionType": "messageBox",
+      "actionTitle": "Example",
+      "actionTemplate": "Selected: %N"
     }
   ]
 }
 ```
 
-| 字段 | 作用 |
-|------|------|
-| `extensionGates` | Gate 1 链；逐项非空时对该项附加检查 |
-| `itemGates` | Gate 2 链；`gates` 为其别名 |
-| `presentationGates` | Gate 3 链 |
-| `executors` | 动作执行器链 |
-| `icon` | 相对 DLL 目录的图标路径（SVG 或 BMP） |
+菜单项目标先于 Gate 和选择过滤执行。目标为空时保持兼容行为，由 `filesOnly`、`foldersOnly` 和扩展名等过滤条件决定。
 
-空数组时回退默认链：`extensionPass` → `jsonFilter` → `presentationPass` → `messageBox` + `launch`。
+动作支持：
 
-C++ 在 `GateRegistry` / `ExecutorRegistry` 中注册自定义 Gate 与 Executor。
+- `messageBox`：展开占位符后显示 MessageBox。
+- `launch`：展开占位符后启动命令行。
 
-## 平台说明（Win7 SP1+）
+占位符：`%1` 为第一个完整路径，`%*` 为所有路径，`%D` 为父目录，`%N` 为第一个对象或当前目录的名称。
 
-| 主题 | 做法 |
-|------|------|
-| Shell API | `IShellExtInit`、`IContextMenu` |
-| 构建 | `_WIN32_WINNT=0x0601`、`WINVER=0x0601` |
-| 较新 API | `OsVersion` 检测后动态加载 |
-| DPI/图标 | Win7 系统 DPI；Win8.1+ per-monitor（`DpiProvider`） |
-| 注册 | `*` 处理器 + 运行时 Gate；DLL 位数须与 Explorer 一致 |
-| 工具链 | 声称支持 Win7 前须在 Win7 VM 验证 VS 产物 |
+## Gate 与 Executor 扩展
+
+Gate 分为三类：
+
+| 类型 | 接口 | 时机 | 结果 |
+|------|------|------|------|
+| Extension | `IExtensionGate` | Initialize | 允许或拒绝扩展参与 |
+| Item | `IMenuItemGate` | Initialize | 进入或排除候选菜单项 |
+| Presentation | `IMenuItemPresentationGate` | QueryContextMenu | Hidden、Disabled 或 Enabled |
+
+Extension/Item 链按 AND 语义求值；Presentation 状态按 Hidden 优先于 Disabled，Disabled 优先于 Enabled 的规则合并。
+
+新增 Gate：在 `src/gates/` 实现接口，并在 `GateRegistry::RegisterBuiltInGates` 注册名称。新增 Executor：在 `src/actions/` 实现 `IActionExecutor`，并在 `ExecutorRegistry::RegisterBuiltInExecutors` 注册名称。
+
+## 图标加载
+
+`IconProviderRegistry` 按提供器链处理 `icon`：
+
+1. SVG：`SvgIconProvider` 使用 NanoSVG 读取 DLL 目录相对路径并按 DPI 栅格化。
+2. BMP：`BitmapFileIconProvider` 加载位图文件。
+3. 空图标或失败回退：`DefaultResourceIconProvider` 使用资源位图。
+
+Demo 的 `file-F.svg`、`directory-D.svg`、`directoryBackground-DB.svg`、`drive-DR.svg`、`fileSystemObject-FS.svg` 都是独立 SVG，不应把它们硬编码进 C++。
 
 ## 源码布局
 
-```
-src/
-  extension/     COM Shell 入口（薄层）
-  context/       MenuContext、ContextBuilder
-  gates/         Gate 接口、注册表、JsonFilterGate、Demo Gate
-  actions/       IActionExecutor、ExecutorRegistry、MessageBox/Launch
-  platform/      OsVersion、DpiProvider
-  icons/         SVG/BMP 图标提供器、DPI 光栅化
-  menu/          MenuProvider、MenuConfig、MenuGateChains
-  registry/      COM 注册辅助
-  resources/     RC、DEF、位图
-config/
-  menu.json
-  icons/         SVG 等资源
-tools/
-  validate_menu_json.py
-  register.ps1
+```text
+src/extension/  COM DLL 入口、ClassFactory、FileContextMenuExt
+src/context/   MenuContext、ContextBuilder、ShellTargetType
+src/gates/     Gate 接口、注册表、内置 Gate
+src/actions/   Executor 接口、注册表、动作实现
+src/icons/     SVG/BMP/default 图标提供器
+src/menu/      配置解析、过滤、菜单插入和命令执行
+src/registry/  COM/Shell 注册表辅助和注册配置解析
+config/        menu.json、registration.json、icons/
+tools/         构建辅助、register.ps1、BAT 模板、配置校验
 ```
 
-## 路线图
+## 二次开发流程
 
-| 阶段 | 范围 | 状态 |
-|------|------|------|
-| **P0** | ContextBuilder、Gate 1/2/3、JsonFilterGate、candidate/inserted 分离 | ✅ 完成 |
-| **P1** | `IActionExecutor` 责任链 | ✅ 完成 |
-| **P2** | `platform/DpiProvider`、`OsVersion` | ✅ 完成 |
-| **P3** | SVG 图标提供器、逐项 `icon` | ✅ 完成 |
-| **P4** | JSON Gate/Executor 链、Demo 扩展 | ✅ 完成 |
-| **质量** | CI 构建、`menu.json` 校验、Win7 VM 手动回归 | 🔄 进行中 |
-| **附录** | `IExplorerCommand` 试验（非 Win7 基线） | 未开始 |
+1. 修改 `config/menu.json` 或 `config/registration.json`。
+2. 新增 C++ Gate、Executor 或 Shell target 时同步更新 `CMakeLists.txt`、配置校验和文档。
+3. 构建 Release 并运行 `python tools/validate_menu_json.py`。
+4. 使用输出目录的 `register.bat` 重新注册。
+5. 在文件、目录、目录背景、驱动器和混合选择场景逐项验证。
 
 ## 验证清单
 
-### 自动化（CI / 本地）
+### 自动化
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 cmake --build build --config Release
 python tools/validate_menu_json.py
+git diff --check
 ```
 
-GitHub Actions 工作流 `.github/workflows/ci.yml` 在 push/PR 时执行 Release 构建与 JSON 校验。
+CI 在 push/PR 时执行 Release 构建和菜单配置校验。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
 
-### 手动（发布 / Fork 前）
+### 手动
 
 | 场景 | 预期 |
 |------|------|
-| 右键 `.cpp` 文件 | 显示配置项；DebugView 可见 `[ShellExt]` 日志 |
-| `%TEMP%` 下 `.cpp` | `demo:hideTemp` 过滤菜单项 |
-| 只读 `.cpp` | 菜单项灰色（`demo:readOnlyDisable`） |
-| 文件夹背景 | `foldersOnly` 项可见 |
-| 多选 / 扩展名过滤 | `jsonFilter` 规则生效 |
-| 点击菜单 | `demo:actionLog` 日志 + messageBox/launch 执行 |
-| Win7 SP1 x64 VM | DLL 加载、菜单显示、动作执行无崩溃 |
-| Win10 / Win11 x64 | 同上；高 DPI 下图标清晰 |
+| 文件右键 | 只显示文件目标菜单，如 `Demo -F` |
+| 文件夹右键 | 显示 `Demo -D` |
+| 文件夹背景右键 | 显示 `Demo -DB` |
+| 驱动器根目录右键 | 显示 `Demo -DR` |
+| 文件与目录混选 | 显示 `Demo -FS` |
+| MessageBox | `%N` 显示名称，不包含父路径 |
+| 只读/临时目录 | 对应 Gate 按配置隐藏或禁用 |
+| 高 DPI | SVG 图标清晰，菜单布局不抖动 |
+| 卸载后注册表 | 本项目目标和 CLSID 清理完整 |
 
-## Fork 指南
+## 平台和安全边界
 
-1. 修改 `dllmain.cpp` / `include/shell_ext/common.h` 中的 CLSID 与显示名称
-2. 编辑 `config/menu.json`（含 Gate/Executor 链与图标路径）
-3. 新增 `src/gates/MyGate.cpp` 并在 `GateRegistry::RegisterBuiltInGates` 注册
-4. 新增 `src/actions/MyExecutor.cpp` 并在 `ExecutorRegistry::RegisterBuiltInExecutors` 注册
-5. 运行自动化验证；在 Win7 SP1 x64 虚拟机完成上表手动项
+- DLL 位数必须匹配 Explorer。
+- 注册和卸载需要管理员权限。
+- 注册表操作只删除本项目 CLSID 对应键。
+- Gate 不应执行扫描磁盘、网络访问等重 IO。
+- Win7 支持在发布前必须通过虚拟机回归。
