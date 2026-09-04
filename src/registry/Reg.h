@@ -1,4 +1,4 @@
-/****************************** Module Header ******************************\
+﻿/****************************** Module Header ******************************\
 Module Name:  Reg.h
 Project:      CppShellExtContextMenuHandler
 Copyright (c) Microsoft Corporation.
@@ -19,11 +19,8 @@ THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF ANY KIND,
 EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE IMPLIED 
 WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 \***************************************************************************/
-
 #pragma once
-
 #include <windows.h>
-
 
 //
 //   FUNCTION: RegisterInprocServer
@@ -37,7 +34,7 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 //   * pszThreadModel - Threading model
 //
 //   NOTE: The function creates the HKCR\CLSID\{<CLSID>} key in the registry.
-// 
+//
 //   HKCR
 //   {
 //      NoRemove CLSID
@@ -52,9 +49,7 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 //      }
 //   }
 //
-HRESULT RegisterInprocServer(PCWSTR pszModule, const CLSID& clsid, 
-    PCWSTR pszFriendlyName, PCWSTR pszThreadModel);
-
+HRESULT RegisterInprocServer(PCWSTR pszModule, const CLSID& clsid, PCWSTR pszFriendlyName, PCWSTR pszThreadModel);
 
 //
 //   FUNCTION: UnregisterInprocServer
@@ -68,15 +63,14 @@ HRESULT RegisterInprocServer(PCWSTR pszModule, const CLSID& clsid,
 //
 HRESULT UnregisterInprocServer(const CLSID& clsid);
 
-
 //
 //   FUNCTION: RegisterShellExtContextMenuHandler
 //
 //   PURPOSE: Register the context menu handler.
 //
 //   PARAMETERS:
-//   * pszFileType - The file type that the context menu handler is 
-//     associated with. For example, '*' means all file types; '.txt' means 
+//   * pszFileType - The file type that the context menu handler is
+//     associated with. For example, '*' means all file types; '.txt' means
 //     all .txt files. The parameter must not be NULL.
 //   * clsid - Class ID of the component
 //   * pszFriendlyName - Friendly name
@@ -97,9 +91,7 @@ HRESULT UnregisterInprocServer(const CLSID& clsid);
 //      }
 //   }
 //
-HRESULT RegisterShellExtContextMenuHandler(
-    PCWSTR pszFileType, const CLSID& clsid, PCWSTR pszFriendlyName);
-
+HRESULT RegisterShellExtContextMenuHandler(PCWSTR pszFileType, const CLSID& clsid, PCWSTR pszFriendlyName);
 
 //
 //   FUNCTION: UnregisterShellExtContextMenuHandler
@@ -107,13 +99,12 @@ HRESULT RegisterShellExtContextMenuHandler(
 //   PURPOSE: Unregister the context menu handler.
 //
 //   PARAMETERS:
-//   * pszFileType - The file type that the context menu handler is 
-//     associated with. For example, '*' means all file types; '.txt' means 
+//   * pszFileType - The file type that the context menu handler is
+//     associated with. For example, '*' means all file types; '.txt' means
 //     all .txt files. The parameter must not be NULL.
 //   * clsid - Class ID of the component
 //
-//   NOTE: The function removes the {<CLSID>} key under 
+//   NOTE: The function removes the {<CLSID>} key under
 //   HKCR\<File Type>\shellex\ContextMenuHandlers in the registry.
 //
-HRESULT UnregisterShellExtContextMenuHandler(
-    PCWSTR pszFileType, const CLSID& clsid);
+HRESULT UnregisterShellExtContextMenuHandler(PCWSTR pszFileType, const CLSID& clsid);

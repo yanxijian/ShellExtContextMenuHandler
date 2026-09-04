@@ -1,4 +1,4 @@
-#include "ShellTarget.h"
+﻿#include "ShellTarget.h"
 
 bool ParseShellTargetType(const std::wstring& value, ShellTargetType& targetType)
 {

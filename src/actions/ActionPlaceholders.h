@@ -1,6 +1,6 @@
-#pragma once
+﻿#pragma once
+#include "MenuContext.h"
 
 #include <string>
-#include "MenuContext.h"
 
 std::wstring ExpandActionPlaceholders(const std::wstring& text, const MenuContext& context);

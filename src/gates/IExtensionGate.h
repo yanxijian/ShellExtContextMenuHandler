@@ -1,9 +1,8 @@
-#pragma once
-
+﻿#pragma once
 #include "MenuContext.h"
 
 struct IExtensionGate
 {
-    virtual ~IExtensionGate() = default;
-    virtual bool ShouldActivate(const MenuContext& context) = 0;
+	virtual ~IExtensionGate() = default;
+	virtual bool ShouldActivate(const MenuContext& context) = 0;
 };

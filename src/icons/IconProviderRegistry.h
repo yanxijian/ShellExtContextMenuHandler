@@ -1,26 +1,25 @@
-#pragma once
-
-#include <windows.h>
+﻿#pragma once
 #include <memory>
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <windows.h>
 
 class IIconProvider;
 
 class IconProviderRegistry
 {
 public:
-    static IconProviderRegistry& Instance();
+	static IconProviderRegistry& Instance();
 
-    void RegisterProvider(const std::wstring& name, std::unique_ptr<IIconProvider> provider);
-    HBITMAP LoadMenuItemIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) const;
+	void RegisterProvider(const std::wstring& name, std::unique_ptr<IIconProvider> provider);
+	HBITMAP LoadMenuItemIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) const;
 
-    void RegisterBuiltInProviders();
+	void RegisterBuiltInProviders();
 
 private:
-    IconProviderRegistry() = default;
+	IconProviderRegistry() = default;
 
-    std::vector<std::wstring> m_chainOrder;
-    std::unordered_map<std::wstring, std::unique_ptr<IIconProvider>> m_providers;
+	std::vector<std::wstring> m_chainOrder;
+	std::unordered_map<std::wstring, std::unique_ptr<IIconProvider>> m_providers;
 };

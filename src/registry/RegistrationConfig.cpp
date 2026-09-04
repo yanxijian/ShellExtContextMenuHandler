@@ -1,12 +1,11 @@
-#include "RegistrationConfig.h"
+﻿#include "RegistrationConfig.h"
 
 #include "ShellLog.h"
-
-#include <windows.h>
 
 #include <algorithm>
 #include <cstdio>
 #include <vector>
+#include <windows.h>
 
 namespace
 {
@@ -32,9 +31,7 @@ namespace
 		}
 
 		std::vector<char> bytes(static_cast<size_t>(fileSize));
-		if (fileSize > 0
-			&& fread(bytes.data(), 1, static_cast<size_t>(fileSize), file)
-			!= static_cast<size_t>(fileSize))
+		if (fileSize > 0 && fread(bytes.data(), 1, static_cast<size_t>(fileSize), file) != static_cast<size_t>(fileSize))
 		{
 			fclose(file);
 			return false;
@@ -47,26 +44,15 @@ namespace
 			return true;
 		}
 
-		const int wideLength = MultiByteToWideChar(
-			CP_UTF8,
-			MB_ERR_INVALID_CHARS,
-			bytes.data(),
-			static_cast<int>(bytes.size()),
-			nullptr,
-			0);
+		const int wideLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
 		if (wideLength <= 0)
 		{
 			return false;
 		}
 
 		std::vector<wchar_t> wideBuffer(static_cast<size_t>(wideLength));
-		if (MultiByteToWideChar(
-			CP_UTF8,
-			MB_ERR_INVALID_CHARS,
-			bytes.data(),
-			static_cast<int>(bytes.size()),
-			wideBuffer.data(),
-			wideLength) <= 0)
+		if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), wideBuffer.data(), wideLength)
+			<= 0)
 		{
 			return false;
 		}
@@ -75,10 +61,7 @@ namespace
 		return true;
 	}
 
-	bool ExtractStringArray(
-		const std::wstring& json,
-		PCWSTR key,
-		std::vector<std::wstring>& values)
+	bool ExtractStringArray(const std::wstring& json, PCWSTR key, std::vector<std::wstring>& values)
 	{
 		const std::wstring keyPattern = std::wstring(L"\"") + key + L"\"";
 		const size_t keyPosition = json.find(keyPattern);
@@ -90,9 +73,7 @@ namespace
 		const size_t colonPosition = json.find(L':', keyPosition + keyPattern.size());
 		const size_t arrayStart = json.find(L'[', colonPosition);
 		const size_t arrayEnd = json.find(L']', arrayStart);
-		if (colonPosition == std::wstring::npos
-			|| arrayStart == std::wstring::npos
-			|| arrayEnd == std::wstring::npos)
+		if (colonPosition == std::wstring::npos || arrayStart == std::wstring::npos || arrayEnd == std::wstring::npos)
 		{
 			return false;
 		}
@@ -154,13 +135,11 @@ namespace
 
 	void SetDefaultRegistrations(std::vector<ShellTargetType>& registrations)
 	{
-		registrations = { ShellTargetType::File };
+		registrations = {ShellTargetType::File};
 	}
-}
+} // namespace
 
-ShellRegistrationConfigStatus LoadShellRegistrationConfig(
-	const std::wstring& configPath,
-	std::vector<ShellTargetType>& registrations)
+ShellRegistrationConfigStatus LoadShellRegistrationConfig(const std::wstring& configPath, std::vector<ShellTargetType>& registrations)
 {
 	registrations.clear();
 
@@ -174,10 +153,8 @@ ShellRegistrationConfigStatus LoadShellRegistrationConfig(
 	}
 
 	UINT schemaVersion = 0;
-	if (!ExtractUIntValue(json, L"schemaVersion", schemaVersion)
-		|| schemaVersion != 1
-		|| !ExtractStringArray(json, L"shellRegistrations", configuredTargets)
-		|| configuredTargets.empty())
+	if (!ExtractUIntValue(json, L"schemaVersion", schemaVersion) || schemaVersion != 1
+		|| !ExtractStringArray(json, L"shellRegistrations", configuredTargets) || configuredTargets.empty())
 	{
 		ShellLog(L"Invalid shell registration configuration: %s", configPath.c_str());
 		return ShellRegistrationConfigStatus::Invalid;
@@ -193,8 +170,7 @@ ShellRegistrationConfigStatus LoadShellRegistrationConfig(
 			return ShellRegistrationConfigStatus::Invalid;
 		}
 
-		if (std::find(registrations.begin(), registrations.end(), targetType)
-			!= registrations.end())
+		if (std::find(registrations.begin(), registrations.end(), targetType) != registrations.end())
 		{
 			registrations.clear();
 			ShellLog(L"Duplicate shell registration target: %s", configuredTarget.c_str());

@@ -1,8 +1,7 @@
-#pragma once
-
+﻿#pragma once
 enum class MenuItemState
 {
-    Hidden,
-    Disabled,
-    Enabled
+	Hidden,
+	Disabled,
+	Enabled
 };

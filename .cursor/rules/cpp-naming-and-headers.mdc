@@ -1,0 +1,18 @@
+---
+description: C++ naming and header conventions adapted for ShellExtContextMenuHandler
+globs: "**/*.{h,hpp,c,cc,cpp,cxx}"
+alwaysApply: false
+---
+
+# C++ 命名与头文件
+
+- 新增成员变量使用 `m_` 前缀和 camelCase，例如 `m_context`。
+- 新增普通函数和参数使用 lowerCamelCase；不要批量重命名 Windows 示例 API 或既有 public API。
+- 文件作用域或外部可见的可变全局变量使用 `g_`；函数内静态变量或可变静态成员使用 `s_`；显式文件作用域 `static` 变量使用 `gs_`。
+- 匿名命名空间中的可变变量按书面声明规则使用 `g_`；不要因为内部链接属性改用其他前缀。
+- 不可变或编译期常量统一使用 `kCamelCase`，不要叠加 `g_`、`s_` 或 `gs_` 前缀。
+- 头文件继续使用本项目现有的 `#pragma once` 约定；不要为了套用其他仓库的 guard 风格批量改写。
+- C++ 核心数据结构继续使用 STL；Windows/COM 类型使用系统定义的句柄、接口和 HRESULT 约定。
+- 新增抽象前先确认它确实减少重复或隔离平台细节。
+
+修改头文件时保持 public API 稳定，避免无关重排和 mass rename。

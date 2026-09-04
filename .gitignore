@@ -4,6 +4,7 @@
 
 /.vs
 /build
+/build-validation
 /out
 /x64
 /Win32

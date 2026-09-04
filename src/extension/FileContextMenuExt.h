@@ -1,33 +1,33 @@
-#pragma once
+﻿#pragma once
+#include "MenuProvider.h"
 
-#include <windows.h>
 #include <shlobj.h>
 #include <vector>
-#include "MenuProvider.h"
+#include <windows.h>
 
 class FileContextMenuExt : public IShellExtInit, public IContextMenu
 {
 public:
-    IFACEMETHODIMP QueryInterface(REFIID riid, void **ppv);
-    IFACEMETHODIMP_(ULONG) AddRef();
-    IFACEMETHODIMP_(ULONG) Release();
+	IFACEMETHODIMP QueryInterface(REFIID riid, void** ppv);
+	IFACEMETHODIMP_(ULONG) AddRef();
+	IFACEMETHODIMP_(ULONG) Release();
 
-    IFACEMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDataObj, HKEY hKeyProgID);
-    IFACEMETHODIMP QueryContextMenu(HMENU hMenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags);
-    IFACEMETHODIMP InvokeCommand(LPCMINVOKECOMMANDINFO pici);
-    IFACEMETHODIMP GetCommandString(UINT_PTR idCommand, UINT uFlags, UINT *pwReserved, LPSTR pszName, UINT cchMax);
+	IFACEMETHODIMP Initialize(LPCITEMIDLIST pidlFolder, LPDATAOBJECT pDataObj, HKEY hKeyProgID);
+	IFACEMETHODIMP QueryContextMenu(HMENU hMenu, UINT indexMenu, UINT idCmdFirst, UINT idCmdLast, UINT uFlags);
+	IFACEMETHODIMP InvokeCommand(LPCMINVOKECOMMANDINFO pici);
+	IFACEMETHODIMP GetCommandString(UINT_PTR idCommand, UINT uFlags, UINT* pwReserved, LPSTR pszName, UINT cchMax);
 
-    FileContextMenuExt(void);
+	FileContextMenuExt(void);
 
 protected:
-    ~FileContextMenuExt(void);
+	~FileContextMenuExt(void);
 
 private:
-    void ReleaseItemBitmaps();
-    HBITMAP LoadItemBitmap(const std::wstring& iconSpec, UINT dpi);
+	void ReleaseItemBitmaps();
+	HBITMAP LoadItemBitmap(const std::wstring& iconSpec, UINT dpi);
 
-    long m_cRef;
-    MenuProvider m_menuProvider;
-    std::vector<InsertedMenuItem> m_insertedItems;
-    std::vector<HBITMAP> m_itemBitmaps;
+	long m_cRef;
+	MenuProvider m_menuProvider;
+	std::vector<InsertedMenuItem> m_insertedItems;
+	std::vector<HBITMAP> m_itemBitmaps;
 };

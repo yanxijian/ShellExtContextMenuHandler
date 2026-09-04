@@ -1,43 +1,43 @@
-#pragma once
+﻿#pragma once
+#include "ShellTarget.h"
 
-#include <windows.h>
 #include <string>
 #include <vector>
-#include "ShellTarget.h"
+#include <windows.h>
 
 struct SelectedItem
 {
-    std::wstring path;
-    std::wstring fileName;
-    std::wstring extension;
-    bool isDirectory = false;
-    DWORD attributes = INVALID_FILE_ATTRIBUTES;
+	std::wstring path;
+	std::wstring fileName;
+	std::wstring extension;
+	bool isDirectory = false;
+	DWORD attributes = INVALID_FILE_ATTRIBUTES;
 };
 
 struct MenuContext
 {
-    std::vector<SelectedItem> selected;
-    std::wstring folderPath;
-    std::wstring progId;
+	std::vector<SelectedItem> selected;
+	std::wstring folderPath;
+	std::wstring progId;
 
-    bool hasFiles = false;
-    bool hasFolders = false;
-    ShellTargetType targetType = ShellTargetType::File;
-    UINT systemDpi = 96;
+	bool hasFiles = false;
+	bool hasFolders = false;
+	ShellTargetType targetType = ShellTargetType::File;
+	UINT systemDpi = 96;
 
-    UINT GetSelectionCount() const
-    {
-        return static_cast<UINT>(selected.size());
-    }
+	UINT GetSelectionCount() const
+	{
+		return static_cast<UINT>(selected.size());
+	}
 
-    std::vector<std::wstring> GetSelectedPaths() const
-    {
-        std::vector<std::wstring> paths;
-        paths.reserve(selected.size());
-        for (const auto& item : selected)
-        {
-            paths.push_back(item.path);
-        }
-        return paths;
-    }
+	std::vector<std::wstring> GetSelectedPaths() const
+	{
+		std::vector<std::wstring> paths;
+		paths.reserve(selected.size());
+		for (const auto& item : selected)
+		{
+			paths.push_back(item.path);
+		}
+		return paths;
+	}
 };

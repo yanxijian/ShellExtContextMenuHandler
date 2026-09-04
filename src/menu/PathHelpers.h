@@ -1,8 +1,7 @@
-#pragma once
-
-#include <windows.h>
+﻿#pragma once
 #include <string>
 #include <vector>
+#include <windows.h>
 
 std::wstring QuotePath(const std::wstring& path);
 std::wstring JoinQuotedPaths(const std::vector<std::wstring>& paths);

@@ -1,5 +1,4 @@
-#pragma once
-
+﻿#pragma once
 #include "ShellTarget.h"
 
 #include <string>
@@ -12,6 +11,4 @@ enum class ShellRegistrationConfigStatus
 	Invalid
 };
 
-ShellRegistrationConfigStatus LoadShellRegistrationConfig(
-	const std::wstring& configPath,
-	std::vector<ShellTargetType>& registrations);
+ShellRegistrationConfigStatus LoadShellRegistrationConfig(const std::wstring& configPath, std::vector<ShellTargetType>& registrations);

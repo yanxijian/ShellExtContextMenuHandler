@@ -1,10 +1,9 @@
-#pragma once
-
+﻿#pragma once
 #include "IIconProvider.h"
 
 class SvgIconProvider : public IIconProvider
 {
 public:
-    bool CanProvide(const std::wstring& iconSpec) const override;
-    HBITMAP LoadIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) override;
+	bool CanProvide(const std::wstring& iconSpec) const override;
+	HBITMAP LoadIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) override;
 };

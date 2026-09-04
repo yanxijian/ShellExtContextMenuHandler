@@ -1,5 +1,4 @@
-#pragma once
-
+﻿#pragma once
 #define L_Menu_Text L"&Display File Name (C++)"
 
 #define Verb_Name "cppdisplay"

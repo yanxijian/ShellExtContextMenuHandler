@@ -1,8 +1,6 @@
-#pragma once
-
-#include <windows.h>
-
+﻿#pragma once
 #include <string>
+#include <windows.h>
 
 enum class ShellTargetType
 {

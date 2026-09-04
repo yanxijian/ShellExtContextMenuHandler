@@ -1,0 +1,19 @@
+---
+description: C++ source quality, formatting, encoding, and review checks
+globs: "**/*.{h,hpp,c,cc,cpp,cxx}"
+alwaysApply: true
+---
+
+# C++ 源码质量
+
+- 手写 C++ 必须使用 UTF-8 with BOM + CRLF；`clang-format` 的 `LineEnding: CRLF` 不会自动添加 BOM。
+- 手写 C++ 遵守根目录 `.clang-format`，列宽上限为 140；只格式化本次修改涉及的代码。
+- 排除 `build*/`、生成目录、`*.pb.cc`、`*.pb.h` 和第三方代码；不要因格式化顺手重写无关文件。
+- 默认使用 ASCII；只有现有文件或接口明确需要时才引入非 ASCII 文本。
+- 注释只用于解释不明显的生命周期、COM、注册表或算法约束，不写重复代码含义的注释。
+- Windows/COM 资源必须成对释放；新增注册/卸载路径要考虑部分失败、幂等性和回滚。
+- 配置格式变更必须同步更新校验脚本或测试样例。
+- 修改后至少执行：针对性构建或测试、可用的配置校验，以及 `git diff --check`。
+- 审查问题按正确性、生命周期/资源、线程与并发、兼容性、可维护性、风格排序。
+
+不要批量格式化生成物、第三方代码或与当前任务无关的旧代码。

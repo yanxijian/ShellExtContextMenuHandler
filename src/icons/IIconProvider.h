@@ -1,13 +1,12 @@
-#pragma once
-
-#include <windows.h>
+﻿#pragma once
 #include <string>
+#include <windows.h>
 
 class IIconProvider
 {
 public:
-    virtual ~IIconProvider() = default;
+	virtual ~IIconProvider() = default;
 
-    virtual bool CanProvide(const std::wstring& iconSpec) const = 0;
-    virtual HBITMAP LoadIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) = 0;
+	virtual bool CanProvide(const std::wstring& iconSpec) const = 0;
+	virtual HBITMAP LoadIcon(const std::wstring& iconSpec, UINT dpi, HINSTANCE module) = 0;
 };

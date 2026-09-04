@@ -1,12 +1,11 @@
-#pragma once
-
+﻿#pragma once
 #include <windows.h>
 
 struct OsVersionInfo
 {
-    DWORD major = 0;
-    DWORD minor = 0;
-    DWORD build = 0;
+	DWORD major = 0;
+	DWORD minor = 0;
+	DWORD build = 0;
 };
 
 const OsVersionInfo& GetOsVersion();

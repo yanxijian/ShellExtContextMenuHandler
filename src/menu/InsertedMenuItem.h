@@ -1,10 +1,9 @@
-#pragma once
-
+﻿#pragma once
 #include "GateTypes.h"
 #include "MenuItem.h"
 
 struct InsertedMenuItem
 {
-    MenuItemDef item;
-    MenuItemState state = MenuItemState::Enabled;
+	MenuItemDef item;
+	MenuItemState state = MenuItemState::Enabled;
 };

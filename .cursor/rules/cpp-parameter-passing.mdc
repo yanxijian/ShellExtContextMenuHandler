@@ -1,0 +1,20 @@
+---
+description: C++ parameter passing and ownership rules for new or touched APIs
+globs: "**/*.{h,hpp,c,cc,cpp,cxx}"
+alwaysApply: false
+---
+
+# C++ 参数传递与所有权
+
+适用于新增或正在修改的接口；不要为了风格对稳定 API 做全仓库改写。
+
+- 标量、枚举、句柄和轻量值类型按值传递。
+- 大型只读 STL 类型使用 `const T&`。
+- 修改调用方对象使用 `T&`；不要把永不为空的输出参数伪装成指针。
+- 独占所有权转移使用 `std::unique_ptr<T>` 按值传递。
+- 共享长期持有使用 `std::shared_ptr<T>` 按值传递；只观察时优先引用或裸指针。
+- Windows/COM 接口指针遵守其现有生命周期约定，不要擅自引入智能指针包装。
+- 不要把 `std::string_view` 或类似视图存入成员，除非明确证明被引用缓冲区生命周期更长。
+- 不要为了“现代化”批量把现有 `const T&` 改成 view，也不要重写稳定 API。
+
+审查时优先关注生命周期、所有权和实际拷贝成本，风格问题放在后面。
