@@ -133,3 +133,9 @@ install(TARGETS ${TARGET_NAME}
 install(FILES config/menu.json DESTINATION .)
 install(FILES config/registration.json DESTINATION .)
 install(DIRECTORY config/icons DESTINATION .)
+
+option(SHELLEXT_BUILD_TESTS "Build the unit test suite" OFF)
+if(SHELLEXT_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

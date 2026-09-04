@@ -18,10 +18,13 @@ jobs:
           cmakeVersion: "4.3.2"
 
       - name: Configure CMake
-        run: cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+        run: cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 
       - name: Build Release
         run: cmake --build build --config Release
+
+      - name: Run unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
 
       - name: Validate menu.json
         run: python tools/validate_menu_json.py
