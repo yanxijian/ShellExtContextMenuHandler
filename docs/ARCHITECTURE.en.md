@@ -4,7 +4,7 @@
 
 ## Design boundary
 
-This project is a Windows Explorer `IContextMenu` Shell extension targeting Windows 7 SP1 and later. The COM DLL owns the menu lifecycle, JSON owns changeable configuration, and C++ owns gates, executors, Shell target recognition, and registry lifecycle.
+This project is a Windows Explorer `IContextMenu` Shell extension targeting Windows 7 SP1 and later. The COM DLL owns the menu lifecycle, JSON owns changeable configuration (parsed with `third_party/nlohmann/json`, UTF-8, BOM tolerated), and C++ owns gates, executors, Shell target recognition, and registry lifecycle.
 
 ## Runtime flow
 
@@ -24,7 +24,7 @@ Explorer calls IContextMenu::QueryContextMenu
   -> IconProviderRegistry loads SVG/BMP/default icons
 
 Explorer calls IContextMenu::InvokeCommand
-  -> map command offset or verb to insertedItem
+  -> map command offset or verb/canonicalName to insertedItem
   -> skip Disabled items
   -> execute the configured executor chain
 ```
@@ -68,7 +68,7 @@ Gates and executors read the constructed context and should not repeat filesyste
 
 ## Configuration model
 
-Root chains can be overridden per menu item:
+Root chains can be overridden per menu item: an explicitly configured per-item chain **replaces** the root default entirely (it is not appended to); root defaults apply only when the chain is missing or empty:
 
 ```json
 {
@@ -91,7 +91,7 @@ Root chains can be overridden per menu item:
 }
 ```
 
-Target matching runs before gates and selection filters. An empty `targets` array preserves the generic filter behavior. Actions support `messageBox` and `launch`; `%1`, `%*`, `%D`, and `%N` are expanded before execution.
+Target matching runs before gates and selection filters. An empty `targets` array preserves the generic filter behavior. Actions support `messageBox` and `launch`; `%1`, `%*`, `%D`, and `%N` are expanded before execution. `launch` explicitly resolves the executable first: quoted paths are used as-is, unquoted paths with spaces follow the CreateProcess prefix-progressive search, and bare command names are resolved from the system directories and absolute PATH entries only (never the current directory); unresolvable commands are logged and rejected. Placeholder expansion is single-pass, so replacement values containing `%1`/`%N` tokens are not expanded again.
 
 ## Gates and executors
 
@@ -127,13 +127,15 @@ src/menu/      configuration, filtering, insertion, invocation
 src/registry/  COM/Shell registry helpers and registration parser
 config/        menu.json, registration.json, icons/
 tools/         build helpers, register.ps1, BAT templates, validation
+tests/         CTest unit tests (compile the real sources)
+third_party/   third-party libraries (nlohmann/json)
 ```
 
 ## Extension workflow
 
 1. Edit `config/menu.json` or `config/registration.json`.
 2. When adding a gate, executor, or Shell target, update `CMakeLists.txt`, validation, and documentation together.
-3. Build Release and run `python tools/validate_menu_json.py`.
+3. Build Release, run the ctest unit tests, and run `python tools/validate_menu_json.py`.
 4. Re-register with the scripts in the output directory.
 5. Test file, directory, directory-background, drive, and mixed-selection contexts.
 
@@ -142,13 +144,14 @@ tools/         build helpers, register.ps1, BAT templates, validation
 ### Automated
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
 git diff --check
 ```
 
-CI runs the Release build and menu validation on push/PR. Hand-written C/C++ also follows the root `.clang-format` and `.cursor/rules/` encoding, naming, and parameter rules.
+CI runs the Release build, unit tests (ctest), and menu validation on push/PR. Hand-written C/C++ also follows the root `.clang-format` and `.cursor/rules/` encoding, naming, and parameter rules.
 
 ### Manual
 
@@ -160,6 +163,7 @@ CI runs the Release build and menu validation on push/PR. Hand-written C/C++ als
 | Drive root | `Demo -DR` |
 | Mixed file/directory selection | `Demo -FS` |
 | MessageBox | `%N` shows the name without the parent path |
+| Very long paths (>260 chars) | Menu renders and placeholders expand in full |
 | Read-only/temp contexts | Configured gates hide or disable items |
 | High DPI | SVG icons remain clear and layout stays stable |
 | After unregister | This project's targets and CLSID are removed |

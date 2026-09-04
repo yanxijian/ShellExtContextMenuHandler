@@ -21,6 +21,7 @@ Before using this project in an important project, commercial software, or produ
 - Built-in gates: `extensionPass`, `jsonFilter`, `presentationPass`, `demo:hideTemp`, `demo:readOnlyDisable`; built-in executors: `messageBox`, `launch`, `demo:actionLog`.
 - Build output includes double-clickable `register.bat` and `unregister.bat` scripts with UAC elevation.
 - Debug logging through `OutputDebugString` with the `[ShellExt]` prefix.
+- Ships CTest unit tests covering config parsing, placeholder expansion, context building, and launch command resolution; CI runs them automatically.
 
 ## Quick Start
 
@@ -36,10 +37,13 @@ Windows 7 SP1 and later are the design targets. Validate the final DLL on the Wi
 ### Build
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
 ```
+
+Unit tests are off by default (`SHELLEXT_BUILD_TESTS=ON` enables them). They live in `tests/` and compile the real sources instead of copies.
 
 `tools/generate-vs.ps1` can also be used to generate the Visual Studio project.
 
@@ -126,15 +130,19 @@ If `registration.json` is missing, registration defaults to `file`. If the file 
 | `executors` | Default action executor chain |
 | `menuItems` | Menu item definitions |
 
+`menu.json` must be UTF-8 (BOM tolerated) and is parsed with `third_party/nlohmann/json`. A field type mismatch is treated as a configuration error and falls back to the built-in menu.
+
+Chain override semantics: an explicitly configured per-item chain **replaces** the root default entirely instead of appending to it. Root defaults apply only when the chain is missing or empty.
+
 ### Per-item fields
 
 | Field | Description |
 |-------|-------------|
 | `id` | Unique identifier |
 | `label` | Menu text; `&` marks an accelerator |
-| `verb` | String command name |
+| `verb` | String command name; InvokeCommand matches on it or `canonicalName` |
 | `helpText` | Explorer status-bar help text |
-| `canonicalName` | Canonical command name |
+| `canonicalName` | Canonical command name; accepted interchangeably with `verb` for matching |
 | `icon` | SVG/BMP path relative to the DLL directory |
 | `targets` | `file`, `directory`, `directoryBackground`, `drive`, or `fileSystemObject` |
 | `separatorAfter` | Insert a separator after the item |
@@ -145,7 +153,7 @@ If `registration.json` is missing, registration defaults to `file`. If the file 
 | `actionType` | `messageBox` or `launch` |
 | `actionTitle` / `actionTemplate` | MessageBox title and content |
 | `actionCommand` / `actionShowWindow` | Launch command and window option |
-| `extensionGates` / `itemGates` / `presentationGates` / `executors` | Per-item overrides of root chains |
+| `extensionGates` / `itemGates` / `presentationGates` / `executors` | Per-item overrides of root chains; explicit chains replace root defaults |
 
 An empty `targets` array preserves compatibility with the generic selection filters. New items should set `targets` explicitly.
 
@@ -159,6 +167,21 @@ An empty `targets` array preserves compatibility with the generic selection filt
 | `%N` | Name of the first selected object or current directory, without its parent path |
 
 If `menu.json` is missing or invalid, the extension falls back to the built-in item in `include/shell_ext/common.h` and the default gate chain.
+
+Placeholder expansion is single-pass: the replacement text is not rescanned, so selected file names containing tokens such as `%1` or `%N` are safe.
+
+### Launch command resolution
+
+The `launch` action explicitly resolves the executable in `actionCommand` before starting it:
+
+- Quoted paths are used as-is.
+- Unquoted paths containing spaces follow the CreateProcess documented prefix-progressive search.
+- Bare command names (such as `notepad.exe`) are resolved from the system directories and absolute PATH entries only — **the current directory is never searched**, preventing same-name executables in it from being hijacked.
+- Unresolvable commands are logged and rejected instead of launched.
+
+### Long paths
+
+Selected object paths are not limited by `MAX_PATH` and are preserved in full in the context and placeholders.
 
 ## Extending the project
 
@@ -216,6 +239,8 @@ src/icons/              SVG/BMP icon providers
 src/menu/               Configuration, filtering, insertion, and invocation
 src/registry/           COM/Shell registry helpers
 tools/                  Build helpers, registration scripts, and validation
+tests/                  CTest unit tests
+third_party/            Third-party libraries (nlohmann/json)
 docs/                   Architecture and validation documentation
 ```
 

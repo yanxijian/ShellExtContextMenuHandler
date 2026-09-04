@@ -21,6 +21,7 @@
 - 内置 Gate：`extensionPass`、`jsonFilter`、`presentationPass`、`demo:hideTemp`、`demo:readOnlyDisable`；内置 Executor：`messageBox`、`launch`、`demo:actionLog`。
 - 构建输出包含可双击的 `register.bat` 和 `unregister.bat`，会请求管理员权限调用 `regsvr32`。
 - 通过 `OutputDebugString` 输出 `[ShellExt]` 调试日志。
+- 内置 CTest 单元测试覆盖配置解析、占位符展开、上下文构建和启动命令解析，CI 自动运行。
 
 ## 快速开始
 
@@ -36,10 +37,13 @@
 ### 构建
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
 ```
+
+单元测试默认关闭（`SHELLEXT_BUILD_TESTS=ON` 启用），位于 `tests/`，直接编译真实源码而非副本。
 
 也可以运行 `tools/generate-vs.ps1` 生成 Visual Studio 工程。
 
@@ -126,15 +130,19 @@ icons/
 | `executors` | 默认动作执行器链 |
 | `menuItems` | 菜单项定义数组 |
 
+`menu.json` 必须是 UTF-8 编码（可带 BOM），由 `third_party/nlohmann/json` 解析；字段类型不匹配视为配置错误，回退到内置菜单。
+
+菜单项链字段的覆盖语义：显式配置的链**整体替换**根级默认链，而不是追加；根级默认链只在配置缺失或为空时使用。
+
 ### 菜单项字段
 
 | 字段 | 说明 |
 |------|------|
 | `id` | 唯一标识 |
 | `label` | 菜单文字，`&` 表示快捷键 |
-| `verb` | 字符串命令名 |
+| `verb` | 字符串命令名；InvokeCommand 按它或 `canonicalName` 匹配 |
 | `helpText` | Explorer 状态栏帮助文字 |
-| `canonicalName` | 规范命令名 |
+| `canonicalName` | 规范命令名；InvokeCommand 匹配时与 `verb` 等效接受 |
 | `icon` | 相对 DLL 目录的 SVG/BMP 路径 |
 | `targets` | 目标数组：`file`、`directory`、`directoryBackground`、`drive`、`fileSystemObject` |
 | `separatorAfter` | 此项后插入分隔线 |
@@ -145,7 +153,7 @@ icons/
 | `actionType` | `messageBox` 或 `launch` |
 | `actionTitle` / `actionTemplate` | MessageBox 标题和内容 |
 | `actionCommand` / `actionShowWindow` | 启动命令和窗口显示选项 |
-| `extensionGates` / `itemGates` / `presentationGates` / `executors` | 对根级链的逐项覆盖 |
+| `extensionGates` / `itemGates` / `presentationGates` / `executors` | 对根级链的逐项覆盖；显式配置的链替换根级默认 |
 
 `targets` 为空时保持兼容行为，由 `filesOnly`、`foldersOnly` 等过滤条件决定；新菜单项建议显式填写 `targets`。
 
@@ -159,6 +167,21 @@ icons/
 | `%N` | 第一个选中对象或当前目录的名称，不含父路径 |
 
 配置无效或缺失时，运行时回退到 `include/shell_ext/common.h` 中的内置菜单项和默认 Gate 链。
+
+占位符展开为单趟扫描：替换后的结果不会被重新解析，因此选中对象的名称中包含 `%1`、`%N` 等 token 也是安全的。
+
+### launch 命令解析
+
+`launch` 动作在启动前显式解析 `actionCommand` 中的可执行文件：
+
+- 带引号的路径原样使用。
+- 不带引号且含空格的路径按 CreateProcess 文档规则做前缀渐进匹配。
+- 裸命令名（如 `notepad.exe`）只在系统目录和 PATH 的绝对项中搜索，**不搜索当前目录**，避免当前目录同名程序被劫持。
+- 解析失败时记录日志并拒绝启动。
+
+### 超长路径
+
+选中对象路径不受 `MAX_PATH` 限制，完整保留到上下文和占位符中。
 
 ## 二次开发
 
@@ -216,6 +239,8 @@ src/icons/              SVG/BMP 图标提供器
 src/menu/               配置、过滤、菜单插入和命令执行
 src/registry/           COM/Shell 注册表辅助
 tools/                  构建辅助、注册脚本和配置校验
+tests/                  CTest 单元测试
+third_party/            第三方库（nlohmann/json）
 docs/                   架构与验证文档
 ```
 

@@ -4,7 +4,7 @@
 
 ## 设计边界
 
-本项目是一个 Windows Explorer `IContextMenu` Shell 扩展，设计目标为 Windows 7 SP1 及之后版本。COM DLL 负责上下文菜单生命周期；JSON 负责可变配置；C++ 负责 Gate、Executor、Shell 目标识别和注册表生命周期。
+本项目是一个 Windows Explorer `IContextMenu` Shell 扩展，设计目标为 Windows 7 SP1 及之后版本。COM DLL 负责上下文菜单生命周期；JSON 负责可变配置（由 `third_party/nlohmann/json` 解析，UTF-8 编码、可带 BOM）；C++ 负责 Gate、Executor、Shell 目标识别和注册表生命周期。
 
 ## 运行时流程
 
@@ -24,7 +24,7 @@ Explorer 调用 IContextMenu::QueryContextMenu
   -> IconProviderRegistry 按 SVG/BMP/default 加载图标
 
 Explorer 调用 IContextMenu::InvokeCommand
-  -> 根据命令 offset 或 verb 找到 insertedItem
+  -> 根据命令 offset 或 verb/canonicalName 找到 insertedItem
   -> Disabled 项不执行
   -> ExecutorRegistry 按配置顺序执行动作
 ```
@@ -68,7 +68,7 @@ Gate 和 Executor 只读取已构建的 `MenuContext`，不应在 Gate 内重复
 
 ## 配置模型
 
-根级链可以被菜单项局部覆盖：
+根级链可以被菜单项覆盖：菜单项显式配置的链**整体替换**根级默认链（而不是追加）；根级默认链只在配置缺失或为空时生效：
 
 ```json
 {
@@ -96,9 +96,9 @@ Gate 和 Executor 只读取已构建的 `MenuContext`，不应在 Gate 内重复
 动作支持：
 
 - `messageBox`：展开占位符后显示 MessageBox。
-- `launch`：展开占位符后启动命令行。
+- `launch`：展开占位符后启动命令行。启动前显式解析可执行文件：带引号路径原样使用，不带引号且含空格的路径按 CreateProcess 规则渐进匹配，裸命令名只在系统目录和 PATH 绝对项中搜索（不搜索当前目录）；解析失败记录日志并拒绝启动。
 
-占位符：`%1` 为第一个完整路径，`%*` 为所有路径，`%D` 为父目录，`%N` 为第一个对象或当前目录的名称。
+占位符：`%1` 为第一个完整路径，`%*` 为所有路径，`%D` 为父目录，`%N` 为第一个对象或当前目录的名称。展开为单趟扫描，替换结果不会被重新解析，替换值中的 `%1`、`%N` 等 token 不会被再次展开。
 
 ## Gate 与 Executor 扩展
 
@@ -136,13 +136,15 @@ src/menu/      配置解析、过滤、菜单插入和命令执行
 src/registry/  COM/Shell 注册表辅助和注册配置解析
 config/        menu.json、registration.json、icons/
 tools/         构建辅助、register.ps1、BAT 模板、配置校验
+tests/         CTest 单元测试（编译真实源码）
+third_party/   第三方库（nlohmann/json）
 ```
 
 ## 二次开发流程
 
 1. 修改 `config/menu.json` 或 `config/registration.json`。
 2. 新增 C++ Gate、Executor 或 Shell target 时同步更新 `CMakeLists.txt`、配置校验和文档。
-3. 构建 Release 并运行 `python tools/validate_menu_json.py`。
+3. 构建 Release，运行 ctest 单元测试和 `python tools/validate_menu_json.py`。
 4. 使用输出目录的 `register.bat` 重新注册。
 5. 在文件、目录、目录背景、驱动器和混合选择场景逐项验证。
 
@@ -151,13 +153,14 @@ tools/         构建辅助、register.ps1、BAT 模板、配置校验
 ### 自动化
 
 ```powershell
-cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
+ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
 git diff --check
 ```
 
-CI 在 push/PR 时执行 Release 构建和菜单配置校验。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
+CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置校验。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
 
 ### 手动
 
@@ -169,6 +172,7 @@ CI 在 push/PR 时执行 Release 构建和菜单配置校验。手写 C/C++ 还�
 | 驱动器根目录右键 | 显示 `Demo -DR` |
 | 文件与目录混选 | 显示 `Demo -FS` |
 | MessageBox | `%N` 显示名称，不包含父路径 |
+| 超长路径（>260 字符） | 菜单正常，占位符展开完整 |
 | 只读/临时目录 | 对应 Gate 按配置隐藏或禁用 |
 | 高 DPI | SVG 图标清晰，菜单布局不抖动 |
 | 卸载后注册表 | 本项目目标和 CLSID 清理完整 |
