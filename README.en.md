@@ -4,6 +4,12 @@
 
 A configurable Windows Explorer context-menu extension derived from Microsoft's C++ Shell extension sample. Menu items, Shell registration targets, filters, gates, executors, and icons are configurable; complex behavior stays in C++.
 
+## Disclaimer
+
+This project was developed primarily with the assistance of AI Agents. Parts of the code, design, and documentation have not undergone sufficient, rigorous, or comprehensive testing. The project is provided for learning, research, and technical reference only; correctness, stability, and security are not guaranteed for all systems, environments, or use cases.
+
+Before using this project in an important project, commercial software, or production environment, perform appropriate code review, customization, security assessment, and compatibility testing. The project author assumes no responsibility for data loss, system failures, business interruptions, or any other direct or indirect losses resulting from the use of this project.
+
 ## Features
 
 - Registers five Shell target types by default: file, directory, directory background, drive, and file-system object.
