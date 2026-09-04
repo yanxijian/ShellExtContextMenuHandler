@@ -195,6 +195,18 @@ IFACEMETHODIMP FileContextMenuExt::GetCommandString(UINT_PTR idCommand, UINT uFl
 	case GCS_VERBW:
 		return StringCchCopy(reinterpret_cast<PWSTR>(pszName), cchMax, item->item.canonicalName.c_str());
 
+	case GCS_HELPTEXTA:
+	{
+		const int written = WideCharToMultiByte(CP_ACP, 0, item->item.helpText.c_str(), -1, pszName, cchMax, nullptr, nullptr);
+		return written > 0 ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+	}
+
+	case GCS_VERBA:
+	{
+		const int written = WideCharToMultiByte(CP_ACP, 0, item->item.canonicalName.c_str(), -1, pszName, cchMax, nullptr, nullptr);
+		return written > 0 ? S_OK : HRESULT_FROM_WIN32(GetLastError());
+	}
+
 	default:
 		return S_OK;
 	}
