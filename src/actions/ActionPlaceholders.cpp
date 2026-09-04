@@ -25,6 +25,15 @@ std::wstring ExpandActionPlaceholders(const std::wstring& text, const MenuContex
         replaceAll(L"%D", QuotePath(context.folderPath));
     }
 
+    if (!context.selected.empty())
+    {
+        replaceAll(L"%N", GetPathName(context.selected.front().path));
+    }
+    else
+    {
+        replaceAll(L"%N", GetPathName(context.folderPath));
+    }
+
     replaceAll(L"%*", JoinQuotedPaths(context.GetSelectedPaths()));
     return result;
 }

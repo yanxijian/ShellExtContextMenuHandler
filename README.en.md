@@ -8,17 +8,18 @@ Based on: [CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/window
 
 ## Features
 
-- Registers only the file target (`*`) by default, with runtime target filters and gates controlling visibility
+- Registers all supported Shell targets by default, with runtime target filters and gates controlling visibility
 - Multiple menu items and gate/executor chains via `config/menu.json`
 - Shell registration targets via `config/registration.json`: `file`, `directory`, `directoryBackground`, `drive`, and `fileSystemObject`
 - `messageBox` and `launch` actions plus custom executors
 - Filters: extension, selection count, files vs folders
-- Reserved support for folder, folder background, and other Shell targets; enable a target before using it
+- Demo coverage for file, directory, directory background, drive, and file system object targets
 - SVG/BMP icons with DPI-aware scaling
 - Built-in demo gates (`demo:hideTemp`, `demo:readOnlyDisable`) and `demo:actionLog` executor
 - Debug logging via `OutputDebugString` ([DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview))
 - **CMake** build; GitHub Actions CI for Release build and `menu.json` validation
 - **Layered Gate architecture** — see [docs/ARCHITECTURE.en.md](docs/ARCHITECTURE.en.md)
+- Build output includes double-clickable `register.bat` and `unregister.bat` scripts with UAC elevation
 
 ## Project layout
 
@@ -41,7 +42,7 @@ python tools/validate_menu_json.py
 .\tools\register.ps1 -Action register   # administrator
 ```
 
-`register.ps1` copies `config/menu.json`, `config/registration.json`, and `config/icons/` beside the DLL.
+The build output contains `register.bat`, `unregister.bat`, and the configuration and icon files beside the DLL.
 
 Right-click a `.cpp` file in Explorer to verify. Full manual checklist: [docs/ARCHITECTURE.en.md](docs/ARCHITECTURE.en.md).
 
@@ -64,8 +65,8 @@ Includes `id`, `label`, `verb`, `icon`, optional `targets`, filter fields, actio
 
 ### Shell registration targets
 
-Edit the `shellRegistrations` array in `config/registration.json`. The default is `["file"]`.
-The abstract targets map to registry locations as follows: `file` to `*`, `directory` to `Directory`, `directoryBackground` to `Directory\\Background`, `drive` to `Drive`, and `fileSystemObject` to `AllFilesystemObjects`.
+Edit the `shellRegistrations` array in `config/registration.json`. The demo enables all five supported targets by default.
+The abstract targets map to registry locations as follows: `file` to `*`, `directory` to `Directory`, `directoryBackground` to `Directory\\Background`, `drive` to `Drive`, and `fileSystemObject` to `AllFilesystemObjects`. To avoid duplicate menu entries, the `fileSystemObject` demo is shown only for mixed file-and-directory selections; single files and directories use `-F` and `-D` respectively.
 
 ### Placeholders
 
@@ -73,6 +74,8 @@ The abstract targets map to registry locations as follows: `file` to `*`, `direc
 |-------|---------|
 | `%1` | First selected path, or current folder |
 | `%*` | All selected paths (quoted) |
+| `%N` | Name of the first selected object or current folder |
+| `%N` | Name of the first selected object or current folder |
 | `%D` | Parent directory |
 
 ## COM identity

@@ -114,6 +114,16 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
     COMMENT "Copying icon assets to output directory"
 )
 
+add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/register.bat.in"
+        "$<TARGET_FILE_DIR:${TARGET_NAME}>/register.bat"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/tools/unregister.bat.in"
+        "$<TARGET_FILE_DIR:${TARGET_NAME}>/unregister.bat"
+    COMMENT "Copying registration scripts to output directory"
+)
+
 install(TARGETS ${TARGET_NAME}
     RUNTIME DESTINATION .
     LIBRARY DESTINATION .

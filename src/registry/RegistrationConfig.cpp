@@ -193,10 +193,15 @@ ShellRegistrationConfigStatus LoadShellRegistrationConfig(
 			return ShellRegistrationConfigStatus::Invalid;
 		}
 
-		if (std::find(registrations.begin(), registrations.end(), targetType) == registrations.end())
+		if (std::find(registrations.begin(), registrations.end(), targetType)
+			!= registrations.end())
 		{
-			registrations.push_back(targetType);
+			registrations.clear();
+			ShellLog(L"Duplicate shell registration target: %s", configuredTarget.c_str());
+			return ShellRegistrationConfigStatus::Invalid;
 		}
+
+		registrations.push_back(targetType);
 	}
 
 	return ShellRegistrationConfigStatus::Loaded;

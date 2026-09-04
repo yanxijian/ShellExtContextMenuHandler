@@ -8,15 +8,16 @@
 
 ## 功能
 
-- 默认仅注册文件目标（`*`），由运行时目标过滤和 Gate 控制可见性
+- 默认注册全部 Shell 目标，由运行时目标过滤和 Gate 控制可见性
 - 通过 `config/menu.json` 配置多个菜单项与 Gate/Executor 链路
 - 通过 `config/registration.json` 配置 Shell 注册目标，支持 `file`、`directory`、`directoryBackground`、`drive` 和 `fileSystemObject`
 - 支持 `messageBox` 与 `launch`（启动进程）动作及自定义 Executor
 - 过滤条件：扩展名、选中数量、文件/文件夹
-- 预留文件夹、文件夹背景等 Shell 目标支持；启用目标后可处理无选中的当前目录
+- Demo 覆盖文件、目录、目录背景、驱动器和文件系统对象五类 Shell 目标
 - SVG/BMP 图标，DPI 感知缩放（Win7 系统 DPI，Win8.1+ per-monitor）
 - 内置 Demo Gate：`demo:hideTemp`、`demo:readOnlyDisable`；Demo Executor：`demo:actionLog`
 - 通过 `OutputDebugString` 输出调试日志（[DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview)）
+- 构建输出目录包含可双击的 `register.bat` 和 `unregister.bat`，自动请求管理员权限
 - **CMake** 构建；GitHub Actions CI 执行 Release 构建与 `menu.json` 校验
 - **分层 Gate 架构**（Extension / Item / Presentation）— 见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
@@ -71,7 +72,7 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 cmake --build build --config Release
 ```
 
-输出：`build/bin/Release/CppShellExtContextMenuHandler.dll`、`menu.json`、`registration.json`、`icons/`。
+输出：`build/bin/Release/CppShellExtContextMenuHandler.dll`、`menu.json`、`registration.json`、`register.bat`、`unregister.bat`、`icons/`。
 
 ### 3. 注册
 
@@ -132,13 +133,14 @@ python tools/validate_menu_json.py
 | `%1` | 第一个选中路径；无选中时为当前文件夹 |
 | `%*` | 所有选中路径（带引号、空格分隔） |
 | `%D` | 父目录 |
+| `%N` | 第一个选中对象或当前目录的名称 |
 
 若 `menu.json` 缺失或无效，扩展回退到 `include/shell_ext/common.h` 中的内置项与默认链路。
 
 ### Shell 注册目标
 
-编辑 `config/registration.json` 的 `shellRegistrations` 数组。默认值为 `["file"]`。
-注册目标使用抽象名称：`file` 对应 `*`，`directory` 对应 `Directory`，`directoryBackground` 对应 `Directory\\Background`，`drive` 对应 `Drive`，`fileSystemObject` 对应 `AllFilesystemObjects`。
+编辑 `config/registration.json` 的 `shellRegistrations` 数组。Demo 默认启用全部五个目标。
+注册目标使用抽象名称：`file` 对应 `*`，`directory` 对应 `Directory`，`directoryBackground` 对应 `Directory\\Background`，`drive` 对应 `Drive`，`fileSystemObject` 对应 `AllFilesystemObjects`。为避免同一菜单重复显示，`fileSystemObject` Demo 只在同时选择文件和目录时显示；单文件和单目录分别显示 `-F`、`-D`。
 
 ## COM 标识
 

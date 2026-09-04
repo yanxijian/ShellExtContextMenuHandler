@@ -49,6 +49,28 @@ std::wstring GetParentDirectory(const std::wstring& path)
     return directory;
 }
 
+std::wstring GetPathName(const std::wstring& path)
+{
+    if (path.empty())
+    {
+        return L"";
+    }
+
+    size_t end = path.size();
+    while (end > 3 && (path[end - 1] == L'\\' || path[end - 1] == L'/'))
+    {
+        --end;
+    }
+
+    const size_t separator = path.find_last_of(L"\\/", end - 1);
+    if (separator == std::wstring::npos || separator + 1 >= end)
+    {
+        return path.substr(0, end);
+    }
+
+    return path.substr(separator + 1, end - separator - 1);
+}
+
 std::wstring ResolveModuleRelativePath(HINSTANCE module, const std::wstring& relativePath)
 {
     if (relativePath.empty())

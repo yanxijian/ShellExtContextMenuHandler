@@ -11,6 +11,13 @@ ROOT = Path(__file__).resolve().parent.parent
 MENU_JSON = ROOT / "config" / "menu.json"
 REGISTRATION_JSON = ROOT / "config" / "registration.json"
 ICONS_DIR = ROOT / "config" / "icons"
+EXPECTED_DEMO_ICONS = {
+    "file-F.svg",
+    "directory-D.svg",
+    "directoryBackground-DB.svg",
+    "drive-DR.svg",
+    "fileSystemObject-FS.svg",
+}
 
 ROOT_CHAIN_KEYS = (
     "extensionGates",
@@ -141,6 +148,11 @@ def main() -> None:
         svg_count = len(list(ICONS_DIR.glob("*.svg")))
         if svg_count == 0:
             print("WARN: config/icons contains no SVG files")
+        missing_icons = EXPECTED_DEMO_ICONS - {
+            icon.name for icon in ICONS_DIR.glob("*.svg")
+        }
+        if missing_icons:
+            fail(f"Missing demo icon(s): {sorted(missing_icons)}")
 
     print(f"OK: validated {len(items)} menu item(s) in {MENU_JSON.name}")
 

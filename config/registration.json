@@ -1,4 +1,10 @@
 {
   "schemaVersion": 1,
-  "shellRegistrations": ["file"]
+  "shellRegistrations": [
+    "file",
+    "directory",
+    "directoryBackground",
+    "drive",
+    "fileSystemObject"
+  ]
 }

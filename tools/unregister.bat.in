@@ -1,0 +1,19 @@
+@echo off
+setlocal
+set "SHELLEXT_DLL=%~dp0CppShellExtContextMenuHandler.dll"
+set "SHELLEXT_REGSVR=%SystemRoot%\System32\regsvr32.exe"
+if not exist "%SHELLEXT_DLL%" (
+    echo DLL not found: "%SHELLEXT_DLL%"
+    pause
+    exit /b 1
+)
+
+powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "$p = Start-Process -FilePath $env:SHELLEXT_REGSVR -ArgumentList '/s','/u',$env:SHELLEXT_DLL -Verb RunAs -Wait -PassThru; exit $p.ExitCode"
+if errorlevel 1 (
+    echo Unregistration failed.
+    pause
+    exit /b 1
+)
+
+echo Shell extension unregistered successfully.
+pause

@@ -35,8 +35,7 @@ bool IsShellTargetMatch(ShellTargetType configuredTarget, ShellTargetType actual
 {
 	if (configuredTarget == ShellTargetType::FileSystemObject)
 	{
-		return actualTarget == ShellTargetType::File
-			|| actualTarget == ShellTargetType::Directory;
+		return actualTarget == ShellTargetType::FileSystemObject;
 	}
 
 	return configuredTarget == actualTarget;
