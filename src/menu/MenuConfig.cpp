@@ -4,13 +4,19 @@
 #include "ShellLog.h"
 #include "common.h"
 
-#include <sstream>
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
+#include <climits>
+#include <string>
 #include <vector>
 #include <windows.h>
 
 namespace
 {
-	bool ReadUtf8File(const std::wstring& path, std::wstring& content)
+	using Json = nlohmann::json;
+
+	bool ReadUtf8File(const std::wstring& path, std::string& content)
 	{
 		FILE* file = nullptr;
 		if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr)
@@ -45,180 +51,98 @@ namespace
 		}
 
 		fclose(file);
+		content.assign(bytes.begin(), bytes.end());
 
-		if (bytes.empty())
+		// Strip a UTF-8 byte order mark if present.
+		if (content.size() >= 3 && static_cast<unsigned char>(content[0]) == 0xEF && static_cast<unsigned char>(content[1]) == 0xBB
+			&& static_cast<unsigned char>(content[2]) == 0xBF)
 		{
-			content.clear();
-			return true;
+			content.erase(0, 3);
 		}
 
-		const int wideLength = MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
+		return true;
+	}
+
+	std::wstring Utf8ToWide(const std::string& value)
+	{
+		if (value.empty())
+		{
+			return std::wstring();
+		}
+
+		const int wideLength = MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), nullptr, 0);
 		if (wideLength <= 0)
+		{
+			return std::wstring();
+		}
+
+		std::wstring wide(static_cast<size_t>(wideLength), L'\0');
+		MultiByteToWideChar(CP_UTF8, 0, value.data(), static_cast<int>(value.size()), &wide[0], wideLength);
+		return wide;
+	}
+
+	bool GetString(const Json& object, const char* key, std::wstring& outValue)
+	{
+		const auto field = object.find(key);
+		if (field == object.end() || !field->is_string())
 		{
 			return false;
 		}
 
-		std::vector<wchar_t> wideBuffer(static_cast<size_t>(wideLength));
-		MultiByteToWideChar(CP_UTF8, 0, bytes.data(), static_cast<int>(bytes.size()), wideBuffer.data(), wideLength);
-		content.assign(wideBuffer.begin(), wideBuffer.end());
+		outValue = Utf8ToWide(field->get_ref<const std::string&>());
 		return true;
 	}
 
-	void Trim(std::wstring& value)
+	bool GetBool(const Json& object, const char* key, bool& outValue)
 	{
-		const wchar_t* whitespace = L" \t\r\n";
-		const size_t start = value.find_first_not_of(whitespace);
-		if (start == std::wstring::npos)
+		const auto field = object.find(key);
+		if (field == object.end() || !field->is_boolean())
 		{
-			value.clear();
+			return false;
+		}
+
+		outValue = field->get<bool>();
+		return true;
+	}
+
+	bool GetUInt(const Json& object, const char* key, UINT& outValue)
+	{
+		const auto field = object.find(key);
+		if (field == object.end() || !field->is_number_unsigned())
+		{
+			return false;
+		}
+
+		const std::uint64_t value = field->get<std::uint64_t>();
+		if (value > UINT_MAX)
+		{
+			return false;
+		}
+
+		outValue = static_cast<UINT>(value);
+		return true;
+	}
+
+	void GetStringArray(const Json& object, const char* key, std::vector<std::wstring>& outValues)
+	{
+		const auto field = object.find(key);
+		if (field == object.end() || !field->is_array())
+		{
 			return;
 		}
 
-		const size_t end = value.find_last_not_of(whitespace);
-		value = value.substr(start, end - start + 1);
-	}
-
-	std::wstring Unquote(const std::wstring& value)
-	{
-		if (value.size() >= 2 && ((value.front() == L'"' && value.back() == L'"') || (value.front() == L'\'' && value.back() == L'\'')))
+		std::vector<std::wstring> values;
+		values.reserve(field->size());
+		for (const auto& element : *field)
 		{
-			return value.substr(1, value.size() - 2);
-		}
-		return value;
-	}
-
-	bool ExtractStringValue(const std::wstring& objectBody, PCWSTR key, std::wstring& outValue)
-	{
-		const std::wstring pattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPos = objectBody.find(pattern);
-		if (keyPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPos = objectBody.find(L':', keyPos + pattern.size());
-		if (colonPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t startQuote = objectBody.find(L'"', colonPos + 1);
-		if (startQuote == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t endQuote = objectBody.find(L'"', startQuote + 1);
-		if (endQuote == std::wstring::npos)
-		{
-			return false;
-		}
-
-		outValue = objectBody.substr(startQuote + 1, endQuote - startQuote - 1);
-		return true;
-	}
-
-	bool ExtractBoolValue(const std::wstring& objectBody, PCWSTR key, bool& outValue)
-	{
-		const std::wstring pattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPos = objectBody.find(pattern);
-		if (keyPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPos = objectBody.find(L':', keyPos + pattern.size());
-		if (colonPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		std::wstring raw = objectBody.substr(colonPos + 1);
-		const size_t commaPos = raw.find(L',');
-		if (commaPos != std::wstring::npos)
-		{
-			raw = raw.substr(0, commaPos);
-		}
-		Trim(raw);
-
-		if (raw == L"true")
-		{
-			outValue = true;
-			return true;
-		}
-		if (raw == L"false")
-		{
-			outValue = false;
-			return true;
-		}
-
-		return false;
-	}
-
-	bool ExtractUIntValue(const std::wstring& objectBody, PCWSTR key, UINT& outValue)
-	{
-		const std::wstring pattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPos = objectBody.find(pattern);
-		if (keyPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPos = objectBody.find(L':', keyPos + pattern.size());
-		if (colonPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		std::wstring raw = objectBody.substr(colonPos + 1);
-		const size_t commaPos = raw.find(L',');
-		if (commaPos != std::wstring::npos)
-		{
-			raw = raw.substr(0, commaPos);
-		}
-		Trim(raw);
-		outValue = static_cast<UINT>(_wtoi(raw.c_str()));
-		return true;
-	}
-
-	bool ExtractStringArray(const std::wstring& objectBody, PCWSTR key, std::vector<std::wstring>& outValues)
-	{
-		const std::wstring pattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPos = objectBody.find(pattern);
-		if (keyPos == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPos = objectBody.find(L':', keyPos + pattern.size());
-		const size_t arrayStart = objectBody.find(L'[', colonPos);
-		const size_t arrayEnd = objectBody.find(L']', arrayStart);
-		if (colonPos == std::wstring::npos || arrayStart == std::wstring::npos || arrayEnd == std::wstring::npos)
-		{
-			return false;
-		}
-
-		std::wstring arrayBody = objectBody.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
-		size_t position = 0;
-		while (position < arrayBody.size())
-		{
-			const size_t startQuote = arrayBody.find(L'"', position);
-			if (startQuote == std::wstring::npos)
+			if (!element.is_string())
 			{
-				break;
+				return;
 			}
-
-			const size_t endQuote = arrayBody.find(L'"', startQuote + 1);
-			if (endQuote == std::wstring::npos)
-			{
-				break;
-			}
-
-			outValues.push_back(arrayBody.substr(startQuote + 1, endQuote - startQuote - 1));
-			position = endQuote + 1;
+			values.push_back(Utf8ToWide(element.get_ref<const std::string&>()));
 		}
 
-		return true;
+		outValues.insert(outValues.end(), values.begin(), values.end());
 	}
 
 	MenuActionType ParseActionType(const std::wstring& actionType)
@@ -230,34 +154,32 @@ namespace
 		return MenuActionType::ShowMessage;
 	}
 
-	bool ParseMenuItemObject(const std::wstring& objectBody, MenuItemDef& item)
+	bool ParseMenuItemObject(const Json& object, MenuItemDef& item)
 	{
-		std::wstring actionType = L"messageBox";
-		std::wstring actionTitle;
-		std::wstring actionTemplate;
-		std::wstring actionCommand;
-		bool actionShowWindow = false;
-
-		if (!ExtractStringValue(objectBody, L"id", item.id) || !ExtractStringValue(objectBody, L"label", item.label)
-			|| !ExtractStringValue(objectBody, L"verb", item.verb))
+		if (!object.is_object())
 		{
 			return false;
 		}
 
-		ExtractStringValue(objectBody, L"helpText", item.helpText);
-		ExtractStringValue(objectBody, L"canonicalName", item.canonicalName);
-		ExtractStringValue(objectBody, L"icon", item.icon);
-		ExtractBoolValue(objectBody, L"separatorAfter", item.separatorAfter);
+		if (!GetString(object, "id", item.id) || !GetString(object, "label", item.label) || !GetString(object, "verb", item.verb))
+		{
+			return false;
+		}
 
-		ExtractStringArray(objectBody, L"extensions", item.filter.extensions);
-		ExtractStringArray(objectBody, L"excludeExtensions", item.filter.excludeExtensions);
-		ExtractUIntValue(objectBody, L"minSelection", item.filter.minSelection);
-		ExtractUIntValue(objectBody, L"maxSelection", item.filter.maxSelection);
-		ExtractBoolValue(objectBody, L"filesOnly", item.filter.filesOnly);
-		ExtractBoolValue(objectBody, L"foldersOnly", item.filter.foldersOnly);
+		GetString(object, "helpText", item.helpText);
+		GetString(object, "canonicalName", item.canonicalName);
+		GetString(object, "icon", item.icon);
+		GetBool(object, "separatorAfter", item.separatorAfter);
+
+		GetStringArray(object, "extensions", item.filter.extensions);
+		GetStringArray(object, "excludeExtensions", item.filter.excludeExtensions);
+		GetUInt(object, "minSelection", item.filter.minSelection);
+		GetUInt(object, "maxSelection", item.filter.maxSelection);
+		GetBool(object, "filesOnly", item.filter.filesOnly);
+		GetBool(object, "foldersOnly", item.filter.foldersOnly);
 
 		std::vector<std::wstring> targetNames;
-		ExtractStringArray(objectBody, L"targets", targetNames);
+		GetStringArray(object, "targets", targetNames);
 		for (const auto& targetName : targetNames)
 		{
 			ShellTargetType targetType;
@@ -268,20 +190,25 @@ namespace
 			item.targets.push_back(targetType);
 		}
 
-		ExtractStringArray(objectBody, L"extensionGates", item.extensionGates);
-		ExtractStringArray(objectBody, L"itemGates", item.itemGates);
+		GetStringArray(object, "extensionGates", item.extensionGates);
+		GetStringArray(object, "itemGates", item.itemGates);
 		if (item.itemGates.empty())
 		{
-			ExtractStringArray(objectBody, L"gates", item.itemGates);
+			GetStringArray(object, "gates", item.itemGates);
 		}
-		ExtractStringArray(objectBody, L"presentationGates", item.presentationGates);
-		ExtractStringArray(objectBody, L"executors", item.executors);
+		GetStringArray(object, "presentationGates", item.presentationGates);
+		GetStringArray(object, "executors", item.executors);
 
-		ExtractStringValue(objectBody, L"actionType", actionType);
-		ExtractStringValue(objectBody, L"actionTitle", actionTitle);
-		ExtractStringValue(objectBody, L"actionTemplate", actionTemplate);
-		ExtractStringValue(objectBody, L"actionCommand", actionCommand);
-		ExtractBoolValue(objectBody, L"actionShowWindow", actionShowWindow);
+		std::wstring actionType = L"messageBox";
+		GetString(object, "actionType", actionType);
+		std::wstring actionTitle;
+		std::wstring actionTemplate;
+		std::wstring actionCommand;
+		bool actionShowWindow = false;
+		GetString(object, "actionTitle", actionTitle);
+		GetString(object, "actionTemplate", actionTemplate);
+		GetString(object, "actionCommand", actionCommand);
+		GetBool(object, "actionShowWindow", actionShowWindow);
 
 		item.action.type = ParseActionType(actionType);
 		item.action.title = actionTitle;
@@ -301,78 +228,16 @@ namespace
 		return true;
 	}
 
-	void ParseRootChainArrays(const std::wstring& json, MenuGateChains& chains)
+	void ParseRootChains(const Json& root, MenuGateChains& chains)
 	{
-		ExtractStringArray(json, L"extensionGates", chains.extensionGates);
-		ExtractStringArray(json, L"itemGates", chains.itemGates);
+		GetStringArray(root, "extensionGates", chains.extensionGates);
+		GetStringArray(root, "itemGates", chains.itemGates);
 		if (chains.itemGates.empty())
 		{
-			ExtractStringArray(json, L"gates", chains.itemGates);
+			GetStringArray(root, "gates", chains.itemGates);
 		}
-		ExtractStringArray(json, L"presentationGates", chains.presentationGates);
-		ExtractStringArray(json, L"executors", chains.executors);
-	}
-
-	bool ParseMenuItemsArray(const std::wstring& json, std::vector<MenuItemDef>& items)
-	{
-		const size_t arrayKey = json.find(L"\"menuItems\"");
-		if (arrayKey == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t arrayStart = json.find(L'[', arrayKey);
-		const size_t arrayEnd = json.rfind(L']');
-		if (arrayStart == std::wstring::npos || arrayEnd == std::wstring::npos || arrayEnd <= arrayStart)
-		{
-			return false;
-		}
-
-		const std::wstring arrayBody = json.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
-		size_t position = 0;
-		while (position < arrayBody.size())
-		{
-			const size_t objectStart = arrayBody.find(L'{', position);
-			if (objectStart == std::wstring::npos)
-			{
-				break;
-			}
-
-			int depth = 0;
-			size_t objectEnd = std::wstring::npos;
-			for (size_t i = objectStart; i < arrayBody.size(); ++i)
-			{
-				if (arrayBody[i] == L'{')
-				{
-					++depth;
-				}
-				else if (arrayBody[i] == L'}')
-				{
-					--depth;
-					if (depth == 0)
-					{
-						objectEnd = i;
-						break;
-					}
-				}
-			}
-
-			if (objectEnd == std::wstring::npos)
-			{
-				break;
-			}
-
-			MenuItemDef item;
-			const std::wstring objectBody = arrayBody.substr(objectStart + 1, objectEnd - objectStart - 1);
-			if (ParseMenuItemObject(objectBody, item))
-			{
-				items.push_back(item);
-			}
-
-			position = objectEnd + 1;
-		}
-
-		return !items.empty();
+		GetStringArray(root, "presentationGates", chains.presentationGates);
+		GetStringArray(root, "executors", chains.executors);
 	}
 } // namespace
 
@@ -413,8 +278,8 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 	document.items = GetBuiltinMenuItems();
 	ApplyDefaultMenuGateChains(document.globalChains);
 
-	std::wstring json;
-	if (!ReadUtf8File(configPath, json))
+	std::string jsonText;
+	if (!ReadUtf8File(configPath, jsonText))
 	{
 		ShellLog(L"Config not found, using built-in menu: %s", configPath.c_str());
 		cachedDocument = document;
@@ -424,10 +289,34 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 		return false;
 	}
 
-	ParseRootChainArrays(json, document.globalChains);
+	const Json root = Json::parse(jsonText, nullptr, false);
+	if (root.is_discarded() || !root.is_object())
+	{
+		ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
+		cachedDocument = document;
+		cachedConfigPath = configPath;
+		hasCachedDocument = true;
+		cachedLoadSucceeded = false;
+		return false;
+	}
+
+	ParseRootChains(root, document.globalChains);
 
 	std::vector<MenuItemDef> items;
-	if (!ParseMenuItemsArray(json, items))
+	const auto menuItems = root.find("menuItems");
+	if (menuItems != root.end() && menuItems->is_array())
+	{
+		for (const auto& element : *menuItems)
+		{
+			MenuItemDef item;
+			if (ParseMenuItemObject(element, item))
+			{
+				items.push_back(item);
+			}
+		}
+	}
+
+	if (items.empty())
 	{
 		ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
 		cachedDocument = document;
