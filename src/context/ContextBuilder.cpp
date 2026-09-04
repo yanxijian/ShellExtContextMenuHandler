@@ -17,11 +17,16 @@ namespace
 
 	void ParsePathComponents(const std::wstring& path, SelectedItem& item)
 	{
-		wchar_t fileName[MAX_PATH] = {};
-		wchar_t extension[MAX_PATH] = {};
-		_wsplitpath_s(path.c_str(), nullptr, 0, nullptr, 0, fileName, MAX_PATH, extension, MAX_PATH);
-		item.fileName = fileName;
-		item.extension = extension;
+		// Size the buffers from the path itself instead of MAX_PATH so long
+		// paths are not silently truncated.
+		const size_t bufferLength = path.size() + 1;
+		std::vector<wchar_t> fileName(bufferLength, L'\0');
+		std::vector<wchar_t> extension(bufferLength, L'\0');
+		if (_wsplitpath_s(path.c_str(), nullptr, 0, nullptr, 0, fileName.data(), bufferLength, extension.data(), bufferLength) == 0)
+		{
+			item.fileName = fileName.data();
+			item.extension = extension.data();
+		}
 	}
 
 	bool TryReadProgId(HKEY hKeyProgID, std::wstring& progId)
@@ -84,15 +89,24 @@ namespace
 		const UINT fileCount = DragQueryFileW(dropHandle, 0xFFFFFFFF, nullptr, 0);
 		for (UINT index = 0; index < fileCount; ++index)
 		{
-			wchar_t selectedPath[MAX_PATH] = {};
-			if (DragQueryFileW(dropHandle, index, selectedPath, ARRAYSIZE(selectedPath)) == 0)
+			// Ask for the required buffer size (in characters, without the
+			// terminating null) first, then allocate exactly that amount so
+			// paths longer than MAX_PATH are not silently truncated.
+			const UINT pathLength = DragQueryFileW(dropHandle, index, nullptr, 0);
+			if (pathLength == 0)
+			{
+				continue;
+			}
+
+			std::vector<wchar_t> selectedPath(pathLength + 1, L'\0');
+			if (DragQueryFileW(dropHandle, index, selectedPath.data(), pathLength + 1) != pathLength)
 			{
 				continue;
 			}
 
 			SelectedItem item;
-			item.path = selectedPath;
-			item.attributes = GetFileAttributesW(selectedPath);
+			item.path = selectedPath.data();
+			item.attributes = GetFileAttributesW(selectedPath.data());
 			item.isDirectory = item.attributes != INVALID_FILE_ATTRIBUTES && (item.attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 			ParsePathComponents(item.path, item);
 
