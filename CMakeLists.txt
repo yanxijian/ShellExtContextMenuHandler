@@ -56,6 +56,7 @@ set_target_properties(${TARGET_NAME} PROPERTIES
 target_include_directories(${TARGET_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include/shell_ext
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/nanosvg
+    ${CMAKE_CURRENT_SOURCE_DIR}/third_party
     ${CMAKE_CURRENT_SOURCE_DIR}/src/extension
     ${CMAKE_CURRENT_SOURCE_DIR}/src/context
     ${CMAKE_CURRENT_SOURCE_DIR}/src/gates
