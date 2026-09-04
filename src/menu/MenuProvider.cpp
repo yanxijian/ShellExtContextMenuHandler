@@ -184,7 +184,10 @@ bool MenuProvider::TryGetInsertedItemByVerb(PCWSTR verb, const InsertedMenuItem*
 
 	for (const auto& insertedItem : m_insertedItems)
 	{
-		if (_wcsicmp(insertedItem.item.verb.c_str(), verb) == 0)
+		const MenuItemDef& definition = insertedItem.item;
+		// GetCommandString(GCS_VERBW) hands out the canonical name while hosts
+		// may also invoke with the configured verb, so accept either spelling.
+		if (_wcsicmp(definition.verb.c_str(), verb) == 0 || _wcsicmp(definition.canonicalName.c_str(), verb) == 0)
 		{
 			*item = &insertedItem;
 			return true;
