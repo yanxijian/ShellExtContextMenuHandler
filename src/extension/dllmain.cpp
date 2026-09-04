@@ -140,6 +140,10 @@ STDAPI DllRegisterServer(void)
         hr = RegisterShellExtContextMenuHandler(L"*", 
             CLSID_FileContextMenuExt, 
             L_Friendly_Menu_Name);
+
+        hr = RegisterShellExtContextMenuHandler(L"Directory", 
+            CLSID_FileContextMenuExt, 
+            L_Friendly_Menu_Name);
     }
 
     return hr;
@@ -169,6 +173,11 @@ STDAPI DllUnregisterServer(void)
         // Unregister the context menu handler.
         hr = UnregisterShellExtContextMenuHandler(L"*", 
             CLSID_FileContextMenuExt);
+
+        // Unregister the context menu handler.
+        hr = UnregisterShellExtContextMenuHandler(L"Directory", 
+            CLSID_FileContextMenuExt);
+
     }
 
     return hr;
