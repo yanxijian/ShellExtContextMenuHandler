@@ -69,8 +69,9 @@ HRESULT SetHKCRRegistryKeyAndValue(PCWSTR pszSubKey, PCWSTR pszValueName, PCWSTR
 	{
 		if (pszData != NULL)
 		{
-			// Set the specified value of the key.
-			DWORD cbData = lstrlen(pszData) * sizeof(*pszData);
+			// Set the specified value of the key. Per the documentation for
+			// RegSetValueEx, REG_SZ data must include the terminating null.
+			DWORD cbData = (lstrlen(pszData) + 1) * sizeof(*pszData);
 			hr = HRESULT_FROM_WIN32(RegSetValueEx(hKey, pszValueName, 0, REG_SZ, reinterpret_cast<const BYTE*>(pszData), cbData));
 		}
 
