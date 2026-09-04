@@ -5,6 +5,7 @@
 #include "MenuConfig.h"
 #include "ShellLog.h"
 #include <Shlwapi.h>
+#include <algorithm>
 #include <strsafe.h>
 
 #pragma comment(lib, "shlwapi.lib")
@@ -48,6 +49,22 @@ void MenuProvider::EnsureConfigLoaded()
     m_globalChains = document.globalChains;
     m_allItems = document.items;
     m_configLoaded = true;
+}
+
+bool MenuProvider::PassesTargetFilter(const MenuItemDef& item) const
+{
+    if (item.targets.empty())
+    {
+        return true;
+    }
+
+    return std::any_of(
+        item.targets.begin(),
+        item.targets.end(),
+        [this](ShellTargetType configuredTarget)
+        {
+            return IsShellTargetMatch(configuredTarget, m_context.targetType);
+        });
 }
 
 bool MenuProvider::PassesExtensionGates(const MenuItemDef& item) const
@@ -99,6 +116,11 @@ HRESULT MenuProvider::Initialize(
 
     for (const auto& item : m_allItems)
     {
+        if (!PassesTargetFilter(item))
+        {
+            continue;
+        }
+
         if (!PassesExtensionGates(item))
         {
             continue;

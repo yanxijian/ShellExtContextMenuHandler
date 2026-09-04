@@ -29,8 +29,14 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 
 #include <windows.h>
 #include <Guiddef.h>
+#include <algorithm>
+#include <string>
+#include <vector>
 #include "ClassFactory.h"           // For the class factory
 #include "Reg.h"
+#include "RegistrationConfig.h"
+#include "ShellTarget.h"
+#include "ShellLog.h"
 #include "common.h"
 
 
@@ -40,9 +46,61 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 const CLSID CLSID_FileContextMenuExt = 
 { 0xBFD98515, 0xCD74, 0x48A4, { 0x98, 0xE2, 0x13, 0xD2, 0x09, 0xE3, 0xEE, 0x4F } };
 
+HINSTANCE g_hInst = NULL;
+long g_cDllRef = 0;
 
-HINSTANCE   g_hInst     = NULL;
-long        g_cDllRef   = 0;
+namespace
+{
+    bool GetSiblingFilePath(PCWSTR fileName, std::wstring& path)
+    {
+        wchar_t modulePath[MAX_PATH] = {};
+        const DWORD length = GetModuleFileNameW(g_hInst, modulePath, ARRAYSIZE(modulePath));
+        if (length == 0 || length >= ARRAYSIZE(modulePath))
+        {
+            return false;
+        }
+
+        path.assign(modulePath, length);
+        const size_t separator = path.find_last_of(L"\\/");
+        if (separator == std::wstring::npos)
+        {
+            return false;
+        }
+
+        path.resize(separator + 1);
+        path.append(fileName);
+        return true;
+    }
+
+    HRESULT RegisterShellTarget(ShellTargetType targetType)
+    {
+        const PCWSTR fileType = GetShellTargetRegistryFileType(targetType);
+        return fileType == nullptr
+            ? E_INVALIDARG
+            : RegisterShellExtContextMenuHandler(
+                fileType,
+                CLSID_FileContextMenuExt,
+                L_Friendly_Menu_Name);
+    }
+
+    HRESULT UnregisterShellTarget(ShellTargetType targetType)
+    {
+        const PCWSTR fileType = GetShellTargetRegistryFileType(targetType);
+        return fileType == nullptr
+            ? E_INVALIDARG
+            : UnregisterShellExtContextMenuHandler(
+                fileType,
+                CLSID_FileContextMenuExt);
+    }
+
+    void SetFirstFailure(HRESULT current, HRESULT& firstFailure)
+    {
+        if (FAILED(current) && SUCCEEDED(firstFailure))
+        {
+            firstFailure = current;
+        }
+    }
+}
 
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD dwReason, LPVOID lpReserved)
@@ -119,34 +177,81 @@ STDAPI DllCanUnloadNow(void)
 // 
 STDAPI DllRegisterServer(void)
 {
-    HRESULT hr;
-
-    wchar_t szModule[MAX_PATH];
-    if (GetModuleFileName(g_hInst, szModule, ARRAYSIZE(szModule)) == 0)
+    wchar_t modulePath[MAX_PATH] = {};
+    if (GetModuleFileNameW(g_hInst, modulePath, ARRAYSIZE(modulePath)) == 0)
     {
-        hr = HRESULT_FROM_WIN32(GetLastError());
+        return HRESULT_FROM_WIN32(GetLastError());
+    }
+
+    HRESULT hr = RegisterInprocServer(
+        modulePath,
+        CLSID_FileContextMenuExt,
+        L_Friendly_Class_Name,
+        L"Apartment");
+    if (FAILED(hr))
+    {
         return hr;
     }
 
-    // Register the component.
-    hr = RegisterInprocServer(szModule, CLSID_FileContextMenuExt, 
-       L_Friendly_Class_Name, 
-        L"Apartment");
-    if (SUCCEEDED(hr))
+    std::wstring configPath;
+    std::vector<ShellTargetType> registrations;
+    if (!GetSiblingFilePath(L"registration.json", configPath))
     {
-        // Register the context menu handler. The context menu handler is 
-        // associated with the any file class.
-		// Control the visibility in QueryContextMenu
-        hr = RegisterShellExtContextMenuHandler(L"*", 
-            CLSID_FileContextMenuExt, 
-            L_Friendly_Menu_Name);
-
-        hr = RegisterShellExtContextMenuHandler(L"Directory", 
-            CLSID_FileContextMenuExt, 
-            L_Friendly_Menu_Name);
+        registrations = { ShellTargetType::File };
+    }
+    else
+    {
+        const ShellRegistrationConfigStatus configStatus =
+            LoadShellRegistrationConfig(configPath, registrations);
+        if (configStatus == ShellRegistrationConfigStatus::Invalid)
+        {
+            UnregisterInprocServer(CLSID_FileContextMenuExt);
+            return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+        }
     }
 
-    return hr;
+    std::vector<ShellTargetType> registeredTargets;
+    for (const ShellTargetType targetType : registrations)
+    {
+        hr = RegisterShellTarget(targetType);
+        if (FAILED(hr))
+        {
+            UnregisterShellTarget(targetType);
+            for (const ShellTargetType registeredTarget : registeredTargets)
+            {
+                UnregisterShellTarget(registeredTarget);
+            }
+            UnregisterInprocServer(CLSID_FileContextMenuExt);
+            return hr;
+        }
+        registeredTargets.push_back(targetType);
+    }
+
+    const ShellTargetType knownTargets[] =
+    {
+        ShellTargetType::File,
+        ShellTargetType::Directory,
+        ShellTargetType::DirectoryBackground,
+        ShellTargetType::Drive,
+        ShellTargetType::FileSystemObject
+    };
+    for (const ShellTargetType knownTarget : knownTargets)
+    {
+        if (std::find(registrations.begin(), registrations.end(), knownTarget)
+            == registrations.end())
+        {
+            hr = UnregisterShellTarget(knownTarget);
+            if (FAILED(hr))
+            {
+                ShellLog(
+                    L"Failed to remove legacy shell registration target; "
+                    L"keeping the current registration: %08X",
+                    hr);
+            }
+        }
+    }
+
+    return S_OK;
 }
 
 
@@ -157,28 +262,24 @@ STDAPI DllRegisterServer(void)
 // 
 STDAPI DllUnregisterServer(void)
 {
-    HRESULT hr = S_OK;
-
-    wchar_t szModule[MAX_PATH];
-    if (GetModuleFileName(g_hInst, szModule, ARRAYSIZE(szModule)) == 0)
+    HRESULT firstFailure = S_OK;
+    const ShellTargetType knownTargets[] =
     {
-        hr = HRESULT_FROM_WIN32(GetLastError());
-        return hr;
+        ShellTargetType::File,
+        ShellTargetType::Directory,
+        ShellTargetType::DirectoryBackground,
+        ShellTargetType::Drive,
+        ShellTargetType::FileSystemObject
+    };
+
+    for (const ShellTargetType targetType : knownTargets)
+    {
+        SetFirstFailure(UnregisterShellTarget(targetType), firstFailure);
     }
 
-    // Unregister the component.
-    hr = UnregisterInprocServer(CLSID_FileContextMenuExt);
-    if (SUCCEEDED(hr))
-    {
-        // Unregister the context menu handler.
-        hr = UnregisterShellExtContextMenuHandler(L"*", 
-            CLSID_FileContextMenuExt);
+    SetFirstFailure(
+        UnregisterInprocServer(CLSID_FileContextMenuExt),
+        firstFailure);
 
-        // Unregister the context menu handler.
-        hr = UnregisterShellExtContextMenuHandler(L"Directory", 
-            CLSID_FileContextMenuExt);
-
-    }
-
-    return hr;
+    return firstFailure;
 }

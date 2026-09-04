@@ -23,6 +23,19 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 #include "Reg.h"
 #include <strsafe.h>
 
+namespace
+{
+    HRESULT DeleteRegistryTree(HKEY rootKey, PCWSTR subKey)
+    {
+        const LONG result = RegDeleteTree(rootKey, subKey);
+        if (result == ERROR_SUCCESS || result == ERROR_FILE_NOT_FOUND)
+        {
+            return S_OK;
+        }
+
+        return HRESULT_FROM_WIN32(result);
+    }
+}
 
 #pragma region Registry Helper Functions
 
@@ -211,7 +224,7 @@ HRESULT UnregisterInprocServer(const CLSID& clsid)
     hr = StringCchPrintf(szSubkey, ARRAYSIZE(szSubkey), L"CLSID\\%s", szCLSID);
     if (SUCCEEDED(hr))
     {
-        hr = HRESULT_FROM_WIN32(RegDeleteTree(HKEY_CLASSES_ROOT, szSubkey));
+        hr = DeleteRegistryTree(HKEY_CLASSES_ROOT, szSubkey);
     }
 
     return hr;
@@ -342,7 +355,7 @@ HRESULT UnregisterShellExtContextMenuHandler(
         L"%s\\shellex\\ContextMenuHandlers\\%s", pszFileType, szCLSID);
     if (SUCCEEDED(hr))
     {
-        hr = HRESULT_FROM_WIN32(RegDeleteTree(HKEY_CLASSES_ROOT, szSubkey));
+        hr = DeleteRegistryTree(HKEY_CLASSES_ROOT, szSubkey);
     }
 
     return hr;

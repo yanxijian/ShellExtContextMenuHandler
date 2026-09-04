@@ -8,6 +8,13 @@
 
 namespace
 {
+    bool IsDrivePath(const std::wstring& path)
+    {
+        return path.size() == 3
+            && path[1] == L':'
+            && (path[2] == L'\\' || path[2] == L'/');
+    }
+
     void ParsePathComponents(const std::wstring& path, SelectedItem& item)
     {
         wchar_t fileName[MAX_PATH] = {};
@@ -117,6 +124,26 @@ bool BuildMenuContext(
     TryReadProgId(hKeyProgID, context.progId);
     TryPopulateFolderPath(pidlFolder, context);
     TryPopulateFromDataObject(dataObject, context);
+    if (context.GetSelectionCount() == 0 && !context.folderPath.empty())
+    {
+        context.targetType = ShellTargetType::DirectoryBackground;
+    }
+    else if (context.hasFolders && !context.hasFiles)
+    {
+        context.targetType = ShellTargetType::Directory;
+        if (context.selected.size() == 1 && IsDrivePath(context.selected[0].path))
+        {
+            context.targetType = ShellTargetType::Drive;
+        }
+    }
+    else if (context.hasFiles && context.hasFolders)
+    {
+        context.targetType = ShellTargetType::FileSystemObject;
+    }
+    else
+    {
+        context.targetType = ShellTargetType::File;
+    }
     context.systemDpi = DpiProvider::GetSystemDpi();
     return context.GetSelectionCount() > 0 || !context.folderPath.empty();
 }

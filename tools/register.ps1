@@ -46,10 +46,17 @@ $dllDir = Split-Path -Parent $DllPath
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $configSource = Join-Path $repoRoot "config\menu.json"
 $configTarget = Join-Path $dllDir "menu.json"
+$registrationSource = Join-Path $repoRoot "config\registration.json"
+$registrationTarget = Join-Path $dllDir "registration.json"
 
 if (Test-Path $configSource) {
     Copy-Item -Path $configSource -Destination $configTarget -Force
     Write-Host "Copied config to $configTarget"
+}
+
+if (Test-Path $registrationSource) {
+    Copy-Item -Path $registrationSource -Destination $registrationTarget -Force
+    Write-Host "Copied registration config to $registrationTarget"
 }
 
 $iconsSource = Join-Path $repoRoot "config\icons"

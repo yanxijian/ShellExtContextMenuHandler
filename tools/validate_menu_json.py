@@ -9,6 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 MENU_JSON = ROOT / "config" / "menu.json"
+REGISTRATION_JSON = ROOT / "config" / "registration.json"
 ICONS_DIR = ROOT / "config" / "icons"
 
 ROOT_CHAIN_KEYS = (
@@ -29,6 +30,13 @@ ITEM_CHAIN_KEYS = (
 
 REQUIRED_ITEM_FIELDS = ("id", "label", "verb")
 ALLOWED_ACTION_TYPES = {"messageBox", "launch"}
+ALLOWED_TARGET_TYPES = {
+    "file",
+    "directory",
+    "directoryBackground",
+    "drive",
+    "fileSystemObject",
+}
 
 
 def fail(message: str) -> None:
@@ -65,6 +73,13 @@ def validate_item(item: object, index: int) -> None:
         if not icon_path.is_file():
             fail(f"menuItems[{index}].icon file not found: {icon}")
 
+    targets = item.get("targets")
+    if targets is not None:
+        check_string_array(targets, f"menuItems[{index}].targets")
+        unknown_targets = set(targets) - ALLOWED_TARGET_TYPES
+        if unknown_targets:
+            fail(f"menuItems[{index}].targets contains unknown target(s): {sorted(unknown_targets)}")
+
     for key in ITEM_CHAIN_KEYS:
         if key in item:
             check_string_array(item[key], f"menuItems[{index}].{key}")
@@ -81,6 +96,30 @@ def main() -> None:
 
     if not isinstance(document, dict):
         fail("menu.json root must be an object")
+
+    if not REGISTRATION_JSON.is_file():
+        fail(f"Missing config file: {REGISTRATION_JSON}")
+
+    try:
+        registration_document = json.loads(REGISTRATION_JSON.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"Invalid JSON in {REGISTRATION_JSON}: {exc}")
+
+    if not isinstance(registration_document, dict):
+        fail("registration.json root must be an object")
+
+    if registration_document.get("schemaVersion") != 1:
+        fail("registration.json schemaVersion must be 1")
+
+    registrations = registration_document.get("shellRegistrations")
+    if not isinstance(registrations, list) or not registrations:
+        fail("registration.json shellRegistrations must be a non-empty array")
+    check_string_array(registrations, "shellRegistrations")
+    unknown_registrations = set(registrations) - ALLOWED_TARGET_TYPES
+    if unknown_registrations:
+        fail(f"shellRegistrations contains unknown target(s): {sorted(unknown_registrations)}")
+    if len(registrations) != len(set(registrations)):
+        fail("shellRegistrations must not contain duplicates")
 
     for key in ROOT_CHAIN_KEYS:
         if key in document:

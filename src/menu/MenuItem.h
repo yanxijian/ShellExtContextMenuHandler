@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <string>
 #include <vector>
+#include "ShellTarget.h"
 
 enum class MenuActionType
 {
@@ -40,6 +41,7 @@ struct MenuItemDef
     bool separatorAfter = false;
     MenuFilter filter;
     MenuAction action;
+    std::vector<ShellTargetType> targets;
 
     std::vector<std::wstring> extensionGates;
     std::vector<std::wstring> itemGates;

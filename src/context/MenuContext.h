@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <string>
 #include <vector>
+#include "ShellTarget.h"
 
 struct SelectedItem
 {
@@ -21,6 +22,7 @@ struct MenuContext
 
     bool hasFiles = false;
     bool hasFolders = false;
+    ShellTargetType targetType = ShellTargetType::File;
     UINT systemDpi = 96;
 
     UINT GetSelectionCount() const

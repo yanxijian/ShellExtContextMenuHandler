@@ -8,11 +8,12 @@ Based on: [CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/window
 
 ## Features
 
-- Registered for all file types (`*`), with runtime gates controlling visibility
+- Registers only the file target (`*`) by default, with runtime target filters and gates controlling visibility
 - Multiple menu items and gate/executor chains via `config/menu.json`
+- Shell registration targets via `config/registration.json`: `file`, `directory`, `directoryBackground`, `drive`, and `fileSystemObject`
 - `messageBox` and `launch` actions plus custom executors
 - Filters: extension, selection count, files vs folders
-- Folder background context (current directory when nothing is selected)
+- Reserved support for folder, folder background, and other Shell targets; enable a target before using it
 - SVG/BMP icons with DPI-aware scaling
 - Built-in demo gates (`demo:hideTemp`, `demo:readOnlyDisable`) and `demo:actionLog` executor
 - Debug logging via `OutputDebugString` ([DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview))
@@ -25,7 +26,7 @@ Based on: [CppShellExtContextMenuHandler](https://code.msdn.microsoft.com/window
 ├── CMakeLists.txt
 ├── .github/workflows/ci.yml
 ├── docs/
-├── config/menu.json, config/icons/
+├── config/menu.json, config/registration.json, config/icons/
 ├── src/extension, context, gates, actions, platform, icons, menu, registry, resources
 ├── tools/generate-vs.ps1, register.ps1, validate_menu_json.py
 └── build/             # generated (gitignored)
@@ -40,7 +41,7 @@ python tools/validate_menu_json.py
 .\tools\register.ps1 -Action register   # administrator
 ```
 
-`register.ps1` copies `config/menu.json` and `config/icons/` beside the DLL.
+`register.ps1` copies `config/menu.json`, `config/registration.json`, and `config/icons/` beside the DLL.
 
 Right-click a `.cpp` file in Explorer to verify. Full manual checklist: [docs/ARCHITECTURE.en.md](docs/ARCHITECTURE.en.md).
 
@@ -59,7 +60,12 @@ Edit `config/menu.json`.
 
 ### Per-item fields
 
-Includes `id`, `label`, `verb`, `icon`, filter fields, action fields, and optional per-item `extensionGates` / `itemGates` / `presentationGates` / `executors` overrides.
+Includes `id`, `label`, `verb`, `icon`, optional `targets`, filter fields, action fields, and optional per-item `extensionGates` / `itemGates` / `presentationGates` / `executors` overrides.
+
+### Shell registration targets
+
+Edit the `shellRegistrations` array in `config/registration.json`. The default is `["file"]`.
+The abstract targets map to registry locations as follows: `file` to `*`, `directory` to `Directory`, `directoryBackground` to `Directory\\Background`, `drive` to `Drive`, and `fileSystemObject` to `AllFilesystemObjects`.
 
 ### Placeholders
 

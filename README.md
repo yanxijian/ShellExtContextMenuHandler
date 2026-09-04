@@ -8,11 +8,12 @@
 
 ## 功能
 
-- 注册为所有文件类型（`*`），由运行时 Gate 控制可见性
+- 默认仅注册文件目标（`*`），由运行时目标过滤和 Gate 控制可见性
 - 通过 `config/menu.json` 配置多个菜单项与 Gate/Executor 链路
+- 通过 `config/registration.json` 配置 Shell 注册目标，支持 `file`、`directory`、`directoryBackground`、`drive` 和 `fileSystemObject`
 - 支持 `messageBox` 与 `launch`（启动进程）动作及自定义 Executor
 - 过滤条件：扩展名、选中数量、文件/文件夹
-- 文件夹背景右键（无选中时使用当前目录）
+- 预留文件夹、文件夹背景等 Shell 目标支持；启用目标后可处理无选中的当前目录
 - SVG/BMP 图标，DPI 感知缩放（Win7 系统 DPI，Win8.1+ per-monitor）
 - 内置 Demo Gate：`demo:hideTemp`、`demo:readOnlyDisable`；Demo Executor：`demo:actionLog`
 - 通过 `OutputDebugString` 输出调试日志（[DebugView](https://learn.microsoft.com/sysinternals/downloads/debugview)）
@@ -30,6 +31,7 @@
 ├── README.md / README.en.md
 ├── config/
 │   ├── menu.json
+│   ├── registration.json
 │   └── icons/              # SVG 等资源
 ├── include/shell_ext/common.h
 ├── src/
@@ -69,7 +71,7 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64
 cmake --build build --config Release
 ```
 
-输出：`build/bin/Release/CppShellExtContextMenuHandler.dll`、`menu.json`、`icons/`。
+输出：`build/bin/Release/CppShellExtContextMenuHandler.dll`、`menu.json`、`registration.json`、`icons/`。
 
 ### 3. 注册
 
@@ -80,7 +82,7 @@ cmake --build build --config Release
 .\tools\register.ps1 -Action unregister
 ```
 
-脚本会将 `config/menu.json` 与 `config/icons/` 复制到 DLL 同目录。
+脚本会将 `config/menu.json`、`config/registration.json` 与 `config/icons/` 复制到 DLL 同目录。
 
 ### 4. 验证
 
@@ -114,6 +116,7 @@ python tools/validate_menu_json.py
 | `canonicalName` | 规范动词名 |
 | `icon` | 相对 DLL 目录的图标路径，如 `icons/cpp.svg` |
 | `separatorAfter` | 此项后插入分隔线 |
+| `targets` | Shell 目标数组，如 `file`、`directory`、`directoryBackground` |
 | `extensions` / `excludeExtensions` | 扩展名过滤 |
 | `minSelection` / `maxSelection` | 选中数量（`maxSelection` 为 `0` 表示不限） |
 | `filesOnly` / `foldersOnly` | 文件/文件夹限定 |
@@ -131,6 +134,11 @@ python tools/validate_menu_json.py
 | `%D` | 父目录 |
 
 若 `menu.json` 缺失或无效，扩展回退到 `include/shell_ext/common.h` 中的内置项与默认链路。
+
+### Shell 注册目标
+
+编辑 `config/registration.json` 的 `shellRegistrations` 数组。默认值为 `["file"]`。
+注册目标使用抽象名称：`file` 对应 `*`，`directory` 对应 `Directory`，`directoryBackground` 对应 `Directory\\Background`，`drive` 对应 `Drive`，`fileSystemObject` 对应 `AllFilesystemObjects`。
 
 ## COM 标识
 

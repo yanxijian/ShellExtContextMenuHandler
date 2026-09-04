@@ -260,6 +260,18 @@ namespace
         ExtractBoolValue(objectBody, L"filesOnly", item.filter.filesOnly);
         ExtractBoolValue(objectBody, L"foldersOnly", item.filter.foldersOnly);
 
+        std::vector<std::wstring> targetNames;
+        ExtractStringArray(objectBody, L"targets", targetNames);
+        for (const auto& targetName : targetNames)
+        {
+            ShellTargetType targetType;
+            if (!ParseShellTargetType(targetName, targetType))
+            {
+                return false;
+            }
+            item.targets.push_back(targetType);
+        }
+
         ExtractStringArray(objectBody, L"extensionGates", item.extensionGates);
         ExtractStringArray(objectBody, L"itemGates", item.itemGates);
         if (item.itemGates.empty())
@@ -377,6 +389,7 @@ std::vector<MenuItemDef> GetBuiltinMenuItems()
     item.helpText = L_Verb_Help_Text;
     item.canonicalName = L_Verb_Canonical_Name;
     item.separatorAfter = true;
+    item.targets = { ShellTargetType::File };
     item.filter.extensions = { L_Associated_Type };
     item.filter.minSelection = 1;
     item.filter.filesOnly = true;

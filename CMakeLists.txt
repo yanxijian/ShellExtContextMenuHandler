@@ -17,6 +17,7 @@ set(SHELL_EXT_SOURCES
     src/extension/ClassFactory.cpp
     src/extension/FileContextMenuExt.cpp
     src/context/ContextBuilder.cpp
+    src/context/ShellTarget.cpp
     src/gates/GateRegistry.cpp
     src/gates/JsonFilterGate.cpp
     src/gates/DemoHideTempItemGate.cpp
@@ -40,6 +41,7 @@ set(SHELL_EXT_SOURCES
     src/menu/PathHelpers.cpp
     src/menu/ShellLog.cpp
     src/registry/Reg.cpp
+    src/registry/RegistrationConfig.cpp
 )
 
 add_library(${TARGET_NAME} SHARED ${SHELL_EXT_SOURCES})
@@ -98,6 +100,13 @@ add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
 )
 
 add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_CURRENT_SOURCE_DIR}/config/registration.json"
+        "$<TARGET_FILE_DIR:${TARGET_NAME}>/registration.json"
+    COMMENT "Copying registration.json to output directory"
+)
+
+add_custom_command(TARGET ${TARGET_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:${TARGET_NAME}>/icons"
     COMMAND ${CMAKE_COMMAND} -E copy_directory
         "${CMAKE_CURRENT_SOURCE_DIR}/config/icons"
@@ -111,4 +120,5 @@ install(TARGETS ${TARGET_NAME}
 )
 
 install(FILES config/menu.json DESTINATION .)
+install(FILES config/registration.json DESTINATION .)
 install(DIRECTORY config/icons DESTINATION .)
