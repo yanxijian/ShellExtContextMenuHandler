@@ -275,12 +275,12 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 	}
 
 	document = {};
-	document.items = GetBuiltinMenuItems();
-	ApplyDefaultMenuGateChains(document.globalChains);
 
 	std::string jsonText;
 	if (!ReadUtf8File(configPath, jsonText))
 	{
+		document.items = GetBuiltinMenuItems();
+		ApplyDefaultMenuGateChains(document.globalChains);
 		ShellLog(L"Config not found, using built-in menu: %s", configPath.c_str());
 		cachedDocument = document;
 		cachedConfigPath = configPath;
@@ -292,6 +292,8 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 	const Json root = Json::parse(jsonText, nullptr, false);
 	if (root.is_discarded() || !root.is_object())
 	{
+		document.items = GetBuiltinMenuItems();
+		ApplyDefaultMenuGateChains(document.globalChains);
 		ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
 		cachedDocument = document;
 		cachedConfigPath = configPath;
@@ -300,6 +302,8 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 		return false;
 	}
 
+	// Config-specified chains fully replace the defaults; defaults only fill in
+	// chains that the config leaves unspecified (applied below).
 	ParseRootChains(root, document.globalChains);
 
 	std::vector<MenuItemDef> items;
@@ -318,6 +322,8 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 
 	if (items.empty())
 	{
+		document.items = GetBuiltinMenuItems();
+		ApplyDefaultMenuGateChains(document.globalChains);
 		ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
 		cachedDocument = document;
 		cachedConfigPath = configPath;
