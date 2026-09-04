@@ -4,37 +4,68 @@
 
 std::wstring ExpandActionPlaceholders(const std::wstring& text, const MenuContext& context)
 {
-	std::wstring result = text;
-	const auto replaceAll = [&result](const std::wstring& token, const std::wstring& value)
-	{
-		size_t position = 0;
-		while ((position = result.find(token, position)) != std::wstring::npos)
-		{
-			result.replace(position, token.size(), value);
-			position += value.size();
-		}
-	};
+	const bool hasSelection = !context.selected.empty();
+	const bool hasSelectionOrFolder = hasSelection || !context.folderPath.empty();
 
-	if (!context.selected.empty())
+	std::wstring selectionValue;
+	std::wstring directoryValue;
+	if (hasSelection)
 	{
-		replaceAll(L"%1", QuotePath(context.selected.front().path));
-		replaceAll(L"%D", QuotePath(GetParentDirectory(context.selected.front().path)));
+		selectionValue = QuotePath(context.selected.front().path);
+		directoryValue = QuotePath(GetParentDirectory(context.selected.front().path));
 	}
 	else if (!context.folderPath.empty())
 	{
-		replaceAll(L"%1", QuotePath(context.folderPath));
-		replaceAll(L"%D", QuotePath(context.folderPath));
+		selectionValue = QuotePath(context.folderPath);
+		directoryValue = QuotePath(context.folderPath);
 	}
 
-	if (!context.selected.empty())
+	const std::wstring nameValue = GetPathName(hasSelection ? context.selected.front().path : context.folderPath);
+	const std::wstring allPathsValue = JoinQuotedPaths(context.GetSelectedPaths());
+
+	// Expand every token from the original text in a single pass. Substitution
+	// values are appended directly to the result and are never re-scanned, so a
+	// selected file whose name contains a token (e.g. a file named "%N") can no
+	// longer corrupt other placeholders.
+	std::wstring result;
+	result.reserve(text.size());
+	for (size_t position = 0; position < text.size();)
 	{
-		replaceAll(L"%N", GetPathName(context.selected.front().path));
-	}
-	else
-	{
-		replaceAll(L"%N", GetPathName(context.folderPath));
+		const wchar_t current = text[position];
+		if (current != L'%' || position + 1 >= text.size())
+		{
+			result.push_back(current);
+			++position;
+			continue;
+		}
+
+		const wchar_t token = text[position + 1];
+		if (token == L'1' && hasSelectionOrFolder)
+		{
+			result += selectionValue;
+			position += 2;
+		}
+		else if (token == L'D' && hasSelectionOrFolder)
+		{
+			result += directoryValue;
+			position += 2;
+		}
+		else if (token == L'N')
+		{
+			result += nameValue;
+			position += 2;
+		}
+		else if (token == L'*')
+		{
+			result += allPathsValue;
+			position += 2;
+		}
+		else
+		{
+			result.push_back(current);
+			++position;
+		}
 	}
 
-	replaceAll(L"%*", JoinQuotedPaths(context.GetSelectedPaths()));
 	return result;
 }
