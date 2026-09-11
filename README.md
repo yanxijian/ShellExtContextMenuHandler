@@ -1,5 +1,7 @@
 # ShellExtContextMenuHandler
 
+[![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
+
 **简体中文** | [English](README.en.md)
 
 基于微软官方 C++ Shell 扩展示例改造的 Windows Explorer 右键菜单扩展。菜单项、Shell 注册目标、过滤器、Gate、Executor 和图标都可以配置，复杂逻辑通过 C++ 扩展。
