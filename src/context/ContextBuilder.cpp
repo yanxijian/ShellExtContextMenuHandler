@@ -1,12 +1,10 @@
-#include "ContextBuilder.h"
+﻿#include "ContextBuilder.h"
 
 #include "DpiProvider.h"
 
 #include <ShlObj.h>
 #include <Shlwapi.h>
 #include <stdlib.h>
-
-#pragma comment(lib, "shlwapi.lib")
 
 namespace
 {

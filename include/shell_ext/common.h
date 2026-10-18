@@ -1,4 +1,11 @@
 ﻿#pragma once
+
+// Keep these in sync with project(... VERSION) in CMakeLists.txt and
+// FILEVERSION in src/resources/Version.rc; the repository checker enforces it.
+#define SHELLEXT_VERSION_MAJOR 1
+#define SHELLEXT_VERSION_MINOR 0
+#define SHELLEXT_VERSION_PATCH 0
+
 #define L_Menu_Text L"&Display File Name (C++)"
 
 #define Verb_Name "cppdisplay"

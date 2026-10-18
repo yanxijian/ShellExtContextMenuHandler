@@ -1,4 +1,4 @@
-// Hijack regression test for LaunchExecutor.
+﻿// Hijack regression test for LaunchExecutor.
 // Compiles the REAL LaunchExecutor.cpp / ActionPlaceholders.cpp / PathHelpers.cpp.
 // A fake marker.exe is planted in the current directory while a legitimate copy
 // sits in a directory on PATH; the launch must resolve to the PATH copy.

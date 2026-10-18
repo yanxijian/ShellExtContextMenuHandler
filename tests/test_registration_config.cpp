@@ -1,4 +1,4 @@
-// Verification for the nlohmann/json-based registration parser.
+﻿// Verification for the nlohmann/json-based registration parser.
 // Compiles the REAL RegistrationConfig.cpp so shipped parsing is exercised.
 #include "../src/registry/RegistrationConfig.cpp"
 

@@ -1,4 +1,4 @@
-#include "MenuProvider.h"
+﻿#include "MenuProvider.h"
 
 #include "ContextBuilder.h"
 #include "ExecutorRegistry.h"
@@ -10,8 +10,6 @@
 #include <Shlwapi.h>
 #include <algorithm>
 #include <strsafe.h>
-
-#pragma comment(lib, "shlwapi.lib")
 
 namespace
 {

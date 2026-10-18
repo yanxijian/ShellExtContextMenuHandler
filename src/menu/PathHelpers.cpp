@@ -1,9 +1,7 @@
-#include "PathHelpers.h"
+﻿#include "PathHelpers.h"
 
 #include <Shlwapi.h>
 #include <strsafe.h>
-
-#pragma comment(lib, "shlwapi.lib")
 
 std::wstring QuotePath(const std::wstring& path)
 {

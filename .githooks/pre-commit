@@ -1,0 +1,21 @@
+#!/bin/sh
+# Pre-commit hook: the repository rules that a program can check.
+#
+# Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# The same checker runs in CI (.github/workflows/hygiene.yml); the hook is a
+# convenience, not the guarantee.
+
+set -e
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+
+for candidate in python3 python py; do
+	if command -v "$candidate" >/dev/null 2>&1; then
+		exec "$candidate" scripts/check_repo_rules.py --staged
+	fi
+done
+
+echo "pre-commit: no Python interpreter found; skipping repository rules" >&2
+exit 0

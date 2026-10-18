@@ -1,4 +1,4 @@
-#include "IconProviderRegistry.h"
+﻿#include "IconProviderRegistry.h"
 
 #include "BitmapFileIconProvider.h"
 #include "DefaultResourceIconProvider.h"

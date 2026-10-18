@@ -1,4 +1,4 @@
-#include "FileContextMenuExt.h"
+﻿#include "FileContextMenuExt.h"
 
 #include "ComGuard.h"
 #include "DpiProvider.h"
@@ -8,8 +8,6 @@
 #include <strsafe.h>
 
 #include <string>
-
-#pragma comment(lib, "shlwapi.lib")
 
 extern HINSTANCE g_hInst;
 extern long g_cDllRef;

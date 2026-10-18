@@ -1,4 +1,4 @@
-/****************************** Module Header ******************************\
+﻿/****************************** Module Header ******************************\
 Module Name:  dllmain.cpp
 Project:      CppShellExtContextMenuHandler
 Copyright (c) Microsoft Corporation.

@@ -1,15 +1,27 @@
 root = true
 
 [*]
-end_of_line = crlf
+charset = utf-8
+end_of_line = lf
 insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
 
-# Matches multiple files with brace expansion notation
-[*.{h,hpp,hxx,hh,c,cc,cpp,cxx}]
+[*.{c,cc,cpp,cxx,h,hh,hpp,hxx}]
 charset = utf-8-bom
+end_of_line = crlf
 indent_style = tab
 indent_size = 4
 trim_trailing_whitespace = true
 
+[*.{cmake,txt}]
+indent_style = tab
+indent_size = 4
+
 [*.md]
+end_of_line = crlf
 trim_trailing_whitespace = false
+
+[*.yml]
+indent_size = 2

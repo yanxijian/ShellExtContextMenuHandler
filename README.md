@@ -89,6 +89,23 @@ icons/
 6. 同时选中文件和目录，确认出现 `Demo -FS`。
 7. 执行菜单项，MessageBox 应显示目标名称。
 
+## 工程规范与检查
+
+可机械检查的规范集中在 `scripts/check_repo_rules.py`，CI 在 `.github/workflows/hygiene.yml` 中执行：
+
+- C/C++ 使用 UTF-8 BOM + CRLF；Markdown 使用 CRLF；CMake、脚本、JSON、YAML 使用 LF（见 `.gitattributes` / `.editorconfig`）。
+- C/C++ 行宽不超过 140 列；头文件首行 `#pragma once`；不使用 `#pragma comment(lib)`，Windows 库统一通过 CMake 链接。
+- `CMakeLists.txt`、`src/resources/Version.rc` 和 `include/shell_ext/common.h` 的版本号保持一致；[CHANGELOG.md](CHANGELOG.md) 保留 `[Unreleased]`。
+- Markdown 相对链接、README/架构文档的中英文互链必须可解析。
+
+```powershell
+python scripts/check_repo_rules.py          # 检查
+python scripts/check_repo_rules.py --fix    # 修复 BOM/行尾
+python -m unittest discover -s scripts/tests -v
+```
+
+可选安装提交前钩子：`git config core.hooksPath .githooks`。完整规则和审查重点见 [AGENTS.md](AGENTS.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
+
 ## 配置参考
 
 ### Shell 注册目标
@@ -251,6 +268,7 @@ src/icons/              SVG/BMP 图标提供器
 src/menu/               配置、过滤、菜单插入和命令执行
 src/registry/           COM/Shell 注册表辅助
 tools/                  构建辅助、注册脚本和配置校验
+scripts/                仓库规则检查器及其测试
 tests/                  CTest 单元测试
 third_party/            第三方库（nlohmann/json、NanoSVG）
 docs/                   架构与验证文档

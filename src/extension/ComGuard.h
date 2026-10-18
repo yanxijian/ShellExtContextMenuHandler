@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <windows.h>
 
 // COM methods must never let a C++ exception cross the ABI boundary. Explorer

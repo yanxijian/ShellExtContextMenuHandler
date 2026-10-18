@@ -1,4 +1,4 @@
-#include "LaunchExecutor.h"
+﻿#include "LaunchExecutor.h"
 
 #include "ActionPlaceholders.h"
 #include "ShellLog.h"
@@ -99,7 +99,8 @@ namespace
 
 		std::vector<wchar_t> resolved(1024);
 		PWSTR filePart = nullptr;
-		DWORD length = SearchPathW(searchPath.c_str(), name.c_str(), nullptr, static_cast<DWORD>(resolved.size()), resolved.data(), &filePart);
+		DWORD length = SearchPathW(searchPath.c_str(), name.c_str(), nullptr, static_cast<DWORD>(resolved.size()),
+								   resolved.data(), &filePart);
 		if (length == 0)
 		{
 			return false;
@@ -107,7 +108,8 @@ namespace
 		if (length >= resolved.size())
 		{
 			resolved.resize(length + 1);
-			length = SearchPathW(searchPath.c_str(), name.c_str(), nullptr, static_cast<DWORD>(resolved.size()), resolved.data(), &filePart);
+			length = SearchPathW(searchPath.c_str(), name.c_str(), nullptr, static_cast<DWORD>(resolved.size()),
+								 resolved.data(), &filePart);
 			if (length == 0 || length >= resolved.size())
 			{
 				return false;
@@ -255,8 +257,8 @@ bool LaunchExecutor::Execute(const MenuContext& context, const MenuAction& actio
 	std::vector<wchar_t> mutableCommand(finalCommandLine.begin(), finalCommandLine.end());
 	mutableCommand.push_back(L'\0');
 
-	if (!CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE, action.showWindow ? 0 : CREATE_NO_WINDOW, nullptr,
-				nullptr, &startupInfo, &processInfo))
+	if (!CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE,
+						action.showWindow ? 0 : CREATE_NO_WINDOW, nullptr, nullptr, &startupInfo, &processInfo))
 	{
 		ShellLog(L"CreateProcess failed (%s): %s", applicationName.c_str(), commandLine.c_str());
 		return false;

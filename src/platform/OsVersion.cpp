@@ -1,4 +1,4 @@
-#include "OsVersion.h"
+﻿#include "OsVersion.h"
 
 namespace
 {

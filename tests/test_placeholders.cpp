@@ -1,4 +1,4 @@
-// Verification harness for single-pass placeholder expansion.
+﻿// Verification harness for single-pass placeholder expansion.
 // Compiles the REAL ActionPlaceholders.cpp and PathHelpers.cpp.
 #include "../src/actions/ActionPlaceholders.cpp"
 #include "../src/menu/PathHelpers.cpp"

@@ -137,6 +137,7 @@ src/menu/      configuration, filtering, insertion, invocation
 src/registry/  COM/Shell registry helpers and registration parser
 config/        menu.json, registration.json, icons/
 tools/         build helpers, register.ps1, BAT templates, validation
+scripts/       repository rules checker and its unit tests
 tests/         CTest unit tests (compile the real sources)
 third_party/   third-party libraries (nlohmann/json)
 ```
@@ -158,10 +159,12 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
+python scripts/check_repo_rules.py
+python -m unittest discover -s scripts/tests -v
 git -c core.whitespace=cr-at-eol diff --check
 ```
 
-CI runs the Release build, unit tests (ctest), and menu validation on push/PR. Current CTest coverage includes the COM exception boundary, strict config parsing, placeholders including long `%D`, context building, registration config parsing, and launch argument preservation. Hand-written C/C++ also follows the root `.clang-format` and `.cursor/rules/` encoding, naming, and parameter rules.
+CI runs the Release build, unit tests (ctest), and menu validation on push/PR; the hygiene workflow runs the repository rules checker and its tests separately. Current CTest coverage includes the COM exception boundary, strict config parsing, placeholders including long `%D`, context building, registration config parsing, and launch argument preservation. Hand-written C/C++ follows `.clang-format`, `.editorconfig`, and `AGENTS.md`.
 
 ### Manual
 

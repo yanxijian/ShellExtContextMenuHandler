@@ -87,6 +87,23 @@ Alternatively, use an elevated PowerShell:
 6. Select both a file and a directory and verify `Demo -FS`.
 7. Invoke an item and verify that the MessageBox shows the target name.
 
+## Repository rules and checks
+
+Mechanical rules live in `scripts/check_repo_rules.py` and run in CI via `.github/workflows/hygiene.yml`:
+
+- C/C++ is UTF-8 BOM + CRLF; Markdown is CRLF; CMake, scripts, JSON and YAML are LF (see `.gitattributes` / `.editorconfig`).
+- C/C++ lines stay within 140 columns; headers start with `#pragma once`; no `#pragma comment(lib)` - link Windows libraries through CMake.
+- `CMakeLists.txt`, `src/resources/Version.rc` and `include/shell_ext/common.h` must agree on the version; [CHANGELOG.md](CHANGELOG.md) keeps an `[Unreleased]` section.
+- Relative Markdown links and the Chinese/English document pairs must resolve.
+
+```powershell
+python scripts/check_repo_rules.py          # check
+python scripts/check_repo_rules.py --fix    # repair BOM/line endings
+python -m unittest discover -s scripts/tests -v
+```
+
+Optionally install the pre-commit hook with `git config core.hooksPath .githooks`. See [AGENTS.md](AGENTS.md) for the rules and review priorities, [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for the workflow, and [SECURITY.en.md](SECURITY.en.md) for private reporting.
+
 ## Configuration
 
 ### Shell registration targets
@@ -249,6 +266,7 @@ src/icons/              SVG/BMP icon providers
 src/menu/               Configuration, filtering, insertion, and invocation
 src/registry/           COM/Shell registry helpers
 tools/                  Build helpers, registration scripts, and validation
+scripts/                Repository rules checker and its tests
 tests/                  CTest unit tests
 third_party/            Third-party libraries (nlohmann/json, NanoSVG)
 docs/                   Architecture and validation documentation

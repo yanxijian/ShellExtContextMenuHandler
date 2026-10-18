@@ -1,4 +1,4 @@
-// Verification harness for the nlohmann/json-based MenuConfig parser.
+﻿// Verification harness for the nlohmann/json-based MenuConfig parser.
 // Includes the REAL MenuConfig.cpp and drives it through its public API.
 #include <cstdio>
 #include <cstring>

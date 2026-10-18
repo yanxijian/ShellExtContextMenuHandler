@@ -1,0 +1,62 @@
+# Line endings and text handling, declared once.
+#
+# Policy:
+#   * Hand-written C/C++ is UTF-8 with BOM + CRLF (see AGENTS.md).
+#     `-text -eol` tells git to store and check out those exact bytes.
+#   * Markdown is CRLF; the project lives on Windows and the existing docs use it.
+#   * Build files, scripts, JSON and YAML are LF so they behave the same on
+#     Windows, Linux and CI.
+#   * Resource files are UTF-16LE (resource.h, the main .rc) or UTF-8 (Version.rc);
+#     mark the UTF-16 ones binary so git never rewrites them.
+#
+# scripts/check_repo_rules.py verifies the working tree against this policy.
+
+* text=auto
+
+# Hand-written C/C++: UTF-8 BOM + CRLF, byte for byte.
+*.c     -text -eol
+*.cc    -text -eol
+*.cpp   -text -eol
+*.cxx   -text -eol
+*.h     -text -eol
+*.hh    -text -eol
+*.hpp   -text -eol
+*.hxx   -text -eol
+
+# Resource files: UTF-16LE for resource.h and the main .rc; Version.rc is UTF-8.
+src/resources/resource.h                       -text -eol
+src/resources/ShellExtContextMenuHandler.rc    -text -eol
+src/resources/Version.rc                       -text -eol
+
+# Windows batch files must keep CRLF.
+*.bat   -text -eol
+*.cmd   -text -eol
+
+# Documentation and editor rule files are CRLF; store the bytes as-is so a
+# documentation edit does not renormalise (and rewrite) the whole file.
+*.md    -text -eol
+*.mdc   -text -eol
+
+# Tooling and build inputs are LF.
+CMakeLists.txt   text eol=lf
+*.cmake          text eol=lf
+*.txt            text eol=lf
+*.json           text eol=lf
+*.yml            text eol=lf
+*.yaml           text eol=lf
+*.py             text eol=lf
+*.ps1            text eol=lf
+*.sh             text eol=lf
+.githooks/pre-commit text eol=lf
+*.in             text eol=lf
+*.def            text eol=lf
+.editorconfig    text eol=lf
+.gitattributes   text eol=lf
+.gitignore       text eol=lf
+.clang-format    -text -eol
+LICENSE          text eol=lf
+
+# Binary assets.
+*.bmp    -text
+*.png    -text
+*.ico    -text

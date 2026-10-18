@@ -1,4 +1,4 @@
-// Verifies that COM entry-point guards stop C++ exceptions at the boundary.
+﻿// Verifies that COM entry-point guards stop C++ exceptions at the boundary.
 #include "../src/extension/ComGuard.h"
 
 #include <cstdio>

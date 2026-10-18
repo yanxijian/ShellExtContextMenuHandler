@@ -3,6 +3,7 @@ cmake_minimum_required(VERSION 3.20)
 project(ShellExtContextMenuHandler
     VERSION 1.0.0
     DESCRIPTION "Configurable Windows Explorer context menu shell extension"
+    HOMEPAGE_URL "https://github.com/yanxijian/ShellExtContextMenuHandler"
     LANGUAGES CXX RC
 )
 

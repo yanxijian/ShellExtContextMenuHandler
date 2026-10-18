@@ -1,0 +1,34 @@
+# Repository rules that do not need a compiler: encoding, line endings, version
+# sync, changelog, documentation links, and the checker's own tests.
+#
+# Separate from ci.yml because documentation/config changes must run these even
+# when no build input changes.
+
+name: hygiene
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+    branches: [master, main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  repo-rules:
+    name: repo-rules
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+
+      - name: Check repository rules
+        run: python3 scripts/check_repo_rules.py
+
+      - name: Test the checker
+        run: python3 -m unittest discover -s scripts/tests -v

@@ -1,4 +1,4 @@
-#include "MenuConfig.h"
+﻿#include "MenuConfig.h"
 
 #include "MenuGateChains.h"
 #include "ShellLog.h"

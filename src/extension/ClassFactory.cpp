@@ -18,7 +18,6 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 #include "FileContextMenuExt.h"
 #include <new>
 #include <Shlwapi.h>
-#pragma comment(lib, "shlwapi.lib")
 
 extern long g_cDllRef;
 

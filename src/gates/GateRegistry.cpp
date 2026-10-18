@@ -1,4 +1,4 @@
-#include "GateRegistry.h"
+﻿#include "GateRegistry.h"
 
 #include "DemoHideTempItemGate.h"
 #include "DemoReadOnlyPresentationGate.h"

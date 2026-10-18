@@ -1,4 +1,4 @@
-#include "RegistrationConfig.h"
+﻿#include "RegistrationConfig.h"
 
 #include "ShellLog.h"
 

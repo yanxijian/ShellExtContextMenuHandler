@@ -146,6 +146,7 @@ src/menu/      配置解析、过滤、菜单插入和命令执行
 src/registry/  COM/Shell 注册表辅助和注册配置解析
 config/        menu.json、registration.json、icons/
 tools/         构建辅助、register.ps1、BAT 模板、配置校验
+scripts/       仓库规则检查器及其单元测试
 tests/         CTest 单元测试（编译真实源码）
 third_party/   第三方库（nlohmann/json）
 ```
@@ -167,10 +168,12 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
+python scripts/check_repo_rules.py
+python -m unittest discover -s scripts/tests -v
 git -c core.whitespace=cr-at-eol diff --check
 ```
 
-CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置校验。当前 CTest 覆盖：COM 异常边界、配置严格解析、占位符（含长路径 `%D`）、上下文构建、注册配置解析和 launch 参数保留。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
+CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置校验；hygiene workflow 另外执行仓库规则检查和检查器测试。当前 CTest 覆盖：COM 异常边界、配置严格解析、占位符（含长路径 `%D`）、上下文构建、注册配置解析和 launch 参数保留。手写 C/C++ 还应遵守根目录 `.clang-format`、`.editorconfig` 及 `AGENTS.md` 中的规则。
 
 ### 手动
 

@@ -1,4 +1,4 @@
-#include "DpiProvider.h"
+﻿#include "DpiProvider.h"
 
 #include "OsVersion.h"
 #include "ShellLog.h"
