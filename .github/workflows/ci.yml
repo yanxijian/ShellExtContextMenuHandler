@@ -3,8 +3,25 @@ name: CI
 on:
   push:
     branches: [master, main]
+    # Build only when a build input changes; documentation-only commits are
+    # covered by hygiene.yml, which must keep running on every push.
+    # Rationale: RepoRules docs/ci-scheduling.md.
+    paths: &build_inputs
+      - "src/**"
+      - "include/**"
+      - "config/**"
+      - "cmake/**"
+      - "tests/**"
+      - "tools/**"
+      - "third_party/**"
+      - "scripts/**"
+      - "CMakeLists.txt"
+      - ".clang-format"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [master, main]
+    paths: *build_inputs
+  workflow_dispatch:
 
 permissions:
   contents: read
