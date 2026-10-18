@@ -1,4 +1,4 @@
-﻿#include "GateRegistry.h"
+#include "GateRegistry.h"
 
 #include "DemoHideTempItemGate.h"
 #include "DemoReadOnlyPresentationGate.h"
@@ -33,14 +33,16 @@ namespace
 
 GateRegistry& GateRegistry::Instance()
 {
-	static GateRegistry registry;
-	static bool gatesRegistered = false;
-	if (!gatesRegistered)
+	// Intentionally process-lifetime: the registry is immutable after
+	// construction. Function-local static initialization is thread-safe, so
+	// two Explorer threads can no longer race through lazy registration.
+	static GateRegistry* const registry = []()
 	{
-		registry.RegisterBuiltInGates();
-		gatesRegistered = true;
-	}
-	return registry;
+		auto* instance = new GateRegistry();
+		instance->RegisterBuiltInGates();
+		return instance;
+	}();
+	return *registry;
 }
 
 std::wstring GateRegistry::ResolveGateName(const std::wstring& spec)

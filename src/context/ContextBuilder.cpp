@@ -1,4 +1,4 @@
-﻿#include "ContextBuilder.h"
+#include "ContextBuilder.h"
 
 #include "DpiProvider.h"
 
@@ -13,6 +13,30 @@ namespace
 	bool IsDrivePath(const std::wstring& path)
 	{
 		return path.size() == 3 && path[1] == L':' && (path[2] == L'\\' || path[2] == L'/');
+	}
+
+	DWORD GetFileAttributesLongPath(const std::wstring& path)
+	{
+		DWORD attributes = GetFileAttributesW(path.c_str());
+		if (attributes != INVALID_FILE_ATTRIBUTES || path.size() < MAX_PATH)
+		{
+			return attributes;
+		}
+
+		// Long paths are not resolved by the Win32 API unless the process is
+		// long-path aware or the path is prefixed. Try the extended form for
+		// absolute drive and UNC paths; otherwise keep the original failure.
+		if (path.size() >= 3 && path[1] == L':' && (path[2] == L'\\' || path[2] == L'/'))
+		{
+			return GetFileAttributesW((L"\\\\?\\" + path).c_str());
+		}
+
+		if (path.size() >= 2 && path[0] == L'\\' && path[1] == L'\\' && !(path.size() >= 4 && path[2] == L'?' && path[3] == L'\\'))
+		{
+			return GetFileAttributesW((L"\\\\?\\UNC\\" + path.substr(2)).c_str());
+		}
+
+		return attributes;
 	}
 
 	void ParsePathComponents(const std::wstring& path, SelectedItem& item)
@@ -53,6 +77,13 @@ namespace
 		if (pidlFolder == nullptr)
 		{
 			return false;
+		}
+
+		std::vector<wchar_t> longPath(32768, L'\0');
+		if (SHGetPathFromIDListEx(pidlFolder, longPath.data(), static_cast<DWORD>(longPath.size()), GPFIDL_DEFAULT))
+		{
+			context.folderPath = longPath.data();
+			return true;
 		}
 
 		wchar_t folderPath[MAX_PATH] = {};
@@ -106,7 +137,7 @@ namespace
 
 			SelectedItem item;
 			item.path = selectedPath.data();
-			item.attributes = GetFileAttributesW(selectedPath.data());
+			item.attributes = GetFileAttributesLongPath(selectedPath.data());
 			item.isDirectory = item.attributes != INVALID_FILE_ATTRIBUTES && (item.attributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
 			ParsePathComponents(item.path, item);
 

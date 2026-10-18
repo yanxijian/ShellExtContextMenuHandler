@@ -4,7 +4,7 @@
 
 ## 设计边界
 
-本项目是一个 Windows Explorer `IContextMenu` Shell 扩展，设计目标为 Windows 7 SP1 及之后版本。COM DLL 负责上下文菜单生命周期；JSON 负责可变配置（由 `third_party/nlohmann/json` 解析，UTF-8 编码、可带 BOM）；C++ 负责 Gate、Executor、Shell 目标识别和注册表生命周期。
+本项目是一个 Windows Explorer `IContextMenu` Shell 扩展，设计目标为 Windows 7 SP1 及之后版本。COM DLL 负责上下文菜单生命周期；JSON 负责可变配置（`menu.json` 和 `registration.json` 都由 `third_party/nlohmann/json` 解析，UTF-8 编码、可带 BOM）；C++ 负责 Gate、Executor、Shell 目标识别和注册表生命周期。配置加载是 fail-closed 的：类型错误、未知 Gate/Executor、未知 `actionType`、重复 `id` 等会让整份配置失效并回退内置菜单。
 
 ## 运行时流程
 
@@ -29,7 +29,7 @@ Explorer 调用 IContextMenu::InvokeCommand
   -> ExecutorRegistry 按配置顺序执行动作
 ```
 
-Gate 1 没有通过或没有候选项时，扩展返回 `E_FAIL`；Gate 3 只影响当前菜单项的最终显示状态。配置在进程内首次加载后缓存。
+Gate 1 没有通过或没有候选项时，扩展返回 `E_FAIL`；Gate 3 只影响当前菜单项的最终显示状态。配置在进程内首次加载后缓存，缓存访问有互斥保护；未知 Gate/Executor 名称会被拒绝并回退内置菜单，不会被当作“无过滤”放行。所有 COM 入口都有 `try/catch(...)` 防火墙，异常不会穿过 ABI 进入 Explorer。
 
 ## Shell 注册目标
 
@@ -47,11 +47,12 @@ Gate 1 没有通过或没有候选项时，扩展返回 `E_FAIL`；Gate 3 只影
 
 注册流程：
 
-1. 注册 COM `InprocServer32`。
-2. 读取并校验 `registration.json`。
+1. 读取并严格校验 `registration.json`。配置无效时直接失败，**不修改注册表**，已有安装保持可用。
+2. 注册 COM `InprocServer32`。
 3. 注册配置中的目标；任一目标失败时回滚本次注册。
 4. 清理已知但未启用的旧目标；清理失败时保留当前注册并记录日志。
-5. 卸载时清理所有已知目标和本项目 CLSID，目标不存在视为成功。
+5. 发送 `SHChangeNotify(SHCNE_ASSOCCHANGED, ...)` 通知 Shell 刷新关联。
+6. 卸载时清理所有已知目标和本项目 CLSID，目标不存在视为成功，并发送同样的通知。
 
 缺失 `registration.json` 时默认注册 `file`；存在但无效时注册失败，不静默降级。配置目标必须唯一且属于校验脚本允许的目标集合。
 
@@ -72,6 +73,7 @@ Gate 和 Executor 只读取已构建的 `MenuContext`，不应在 Gate 内重复
 
 ```json
 {
+  "schemaVersion": 1,
   "extensionGates": ["extensionPass"],
   "itemGates": ["jsonFilter"],
   "presentationGates": ["presentationPass"],
@@ -91,14 +93,18 @@ Gate 和 Executor 只读取已构建的 `MenuContext`，不应在 Gate 内重复
 }
 ```
 
+`schemaVersion` 可选，当前只接受 `1`。解析后还会做严格校验：字段类型、必填字段、Shell 目标、Gate/Executor 名称、`actionType`、重复 `id`、`launch` 的 `actionCommand`。任一校验失败都会让整份文档失效并回退内置菜单，避免“部分配置生效”导致过滤条件被静默放宽。
+
 菜单项目标先于 Gate 和选择过滤执行。目标为空时保持兼容行为，由 `filesOnly`、`foldersOnly` 和扩展名等过滤条件决定。
 
 动作支持：
 
 - `messageBox`：展开占位符后显示 MessageBox。
-- `launch`：展开占位符后启动命令行。启动前显式解析可执行文件：带引号路径原样使用，不带引号且含空格的路径按 CreateProcess 规则渐进匹配，裸命令名只在系统目录和 PATH 绝对项中搜索（不搜索当前目录）；解析失败记录日志并拒绝启动。
+- `launch`：展开占位符后启动命令行。启动前显式解析可执行文件：带引号路径原样使用，不带引号且含空格的路径按 CreateProcess 规则渐进匹配，裸命令名只在系统目录和 PATH 绝对项中搜索（不搜索当前目录）；解析失败记录日志并拒绝启动。启动时用解析出的完整路径重新拼接带引号的 `lpCommandLine`，避免未加引号 exe 导致子进程 `argv` 错位。
 
-占位符：`%1` 为第一个完整路径，`%*` 为所有路径，`%D` 为父目录，`%N` 为第一个对象或当前目录的名称。展开为单趟扫描，替换结果不会被重新解析，替换值中的 `%1`、`%N` 等 token 不会被再次展开。
+占位符：`%1` 为第一个完整路径，`%*` 为所有路径，`%D` 为父目录，`%N` 为第一个对象或当前目录的名称。展开为单趟扫描，替换结果不会被重新解析，替换值中的 `%1`、`%N` 等 token 不会被再次展开。`%D` 由动态 `std::wstring` 计算，不受 `MAX_PATH` 限制。
+
+长路径：`DragQueryFileW` 用两次调用获取实际长度；目录背景优先使用 `SHGetPathFromIDListEx`；文件属性读取在普通路径失败时会尝试 `\\?\` 扩展路径。真正超过 `MAX_PATH` 的路径仍要求系统 long path 策略和 long-path-aware 的 Explorer；否则 Shell 不会传递该类路径。
 
 ## Gate 与 Executor 扩展
 
@@ -114,6 +120,10 @@ Extension/Item 链按 AND 语义求值；Presentation 状态按 Hidden 优先于
 
 新增 Gate：在 `src/gates/` 实现接口，并在 `GateRegistry::RegisterBuiltInGates` 注册名称。新增 Executor：在 `src/actions/` 实现 `IActionExecutor`，并在 `ExecutorRegistry::RegisterBuiltInExecutors` 注册名称。
 
+## 并发与缓存
+
+`GateRegistry`、`ExecutorRegistry`、`IconProviderRegistry` 在首次使用时一次性构造，之后只读；使用 function-local static 保证初始化线程安全。`MenuConfig` 的进程级缓存由互斥量保护，`DpiProvider` 和 `OsVersion` 的缓存也使用线程安全的一次性初始化。Explorer 的多个 UI 线程不会同时写入 `std::map`/`std::wstring` 缓存。
+
 ## 图标加载
 
 `IconProviderRegistry` 按提供器链处理 `icon`：
@@ -127,7 +137,7 @@ Demo 的 `file-F.svg`、`directory-D.svg`、`directoryBackground-DB.svg`、`driv
 ## 源码布局
 
 ```text
-src/extension/  COM DLL 入口、ClassFactory、FileContextMenuExt
+src/extension/  COM DLL 入口、ClassFactory、FileContextMenuExt、ComGuard
 src/context/   MenuContext、ContextBuilder、ShellTargetType
 src/gates/     Gate 接口、注册表、内置 Gate
 src/actions/   Executor 接口、注册表、动作实现
@@ -157,10 +167,10 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
-git diff --check
+git -c core.whitespace=cr-at-eol diff --check
 ```
 
-CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置校验。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
+CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置校验。当前 CTest 覆盖：COM 异常边界、配置严格解析、占位符（含长路径 `%D`）、上下文构建、注册配置解析和 launch 参数保留。手写 C/C++ 还应遵守根目录 `.clang-format` 及 `.cursor/rules/` 中的编码、命名和参数规则。
 
 ### 手动
 
@@ -172,15 +182,19 @@ CI 在 push/PR 时执行 Release 构建、单元测试（ctest）和菜单配置
 | 驱动器根目录右键 | 显示 `Demo -DR` |
 | 文件与目录混选 | 显示 `Demo -FS` |
 | MessageBox | `%N` 显示名称，不包含父路径 |
-| 超长路径（>260 字符） | 菜单正常，占位符展开完整 |
+| 超长路径（>260 字符） | 菜单正常，`%1`/`%*`/`%N`/`%D` 展开完整；需系统 long path 策略 + long-path-aware Explorer |
+| 注册后菜单 | 无需重启 Explorer，`SHChangeNotify` 生效 |
+| 无效 `registration.json` | 注册失败，已有安装不被破坏 |
+| 32 位 DLL | 脚本使用 `SysWOW64\regsvr32.exe` |
 | 只读/临时目录 | 对应 Gate 按配置隐藏或禁用 |
 | 高 DPI | SVG 图标清晰，菜单布局不抖动 |
 | 卸载后注册表 | 本项目目标和 CLSID 清理完整 |
 
 ## 平台和安全边界
 
-- DLL 位数必须匹配 Explorer。
+- DLL 位数必须匹配 Explorer；注册脚本按 PE 位数选择 `System32`/`SysWOW64`。
 - 注册和卸载需要管理员权限。
-- 注册表操作只删除本项目 CLSID 对应键。
+- 注册表操作只删除本项目 CLSID 对应键；无效配置不会先删除已有 CLSID。
 - Gate 不应执行扫描磁盘、网络访问等重 IO。
-- Win7 支持在发布前必须通过虚拟机回归。
+- DLL 静态链接 MSVC CRT，目标机不需要额外 VC++ 运行库。
+- Win7 支持在发布前必须通过虚拟机回归；VS 2026 工具链/静态 CRT 的 Win7 兼容性需单独确认。

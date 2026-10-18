@@ -1,4 +1,4 @@
-﻿#include "PathHelpers.h"
+#include "PathHelpers.h"
 
 #include <Shlwapi.h>
 #include <strsafe.h>
@@ -36,18 +36,58 @@ std::wstring JoinQuotedPaths(const std::vector<std::wstring>& paths)
 
 std::wstring GetParentDirectory(const std::wstring& path)
 {
-	wchar_t directory[MAX_PATH] = {};
-	if (FAILED(StringCchCopy(directory, ARRAYSIZE(directory), path.c_str())))
+	if (path.empty())
 	{
 		return L"";
 	}
 
-	if (!PathRemoveFileSpecW(directory))
+	// Keep a drive root (for example "C:\") as its own parent instead of
+	// returning an empty string.
+	if (path.size() >= 3 && path[1] == L':' && (path[2] == L'\\' || path[2] == L'/'))
+	{
+		bool onlyRoot = true;
+		for (size_t i = 3; i < path.size(); ++i)
+		{
+			if (path[i] != L'\\' && path[i] != L'/')
+			{
+				onlyRoot = false;
+				break;
+			}
+		}
+		if (onlyRoot)
+		{
+			return path.substr(0, 3);
+		}
+	}
+
+	size_t end = path.size();
+	while (end > 0 && (path[end - 1] == L'\\' || path[end - 1] == L'/'))
+	{
+		--end;
+	}
+
+	if (end == 0)
 	{
 		return L"";
 	}
 
-	return directory;
+	const size_t separator = path.find_last_of(L"\\/", end - 1);
+	if (separator == std::wstring::npos)
+	{
+		return L"";
+	}
+
+	if (separator == 2 && path.size() > 2 && path[1] == L':')
+	{
+		return path.substr(0, 3);
+	}
+
+	if (separator == 0)
+	{
+		return path.substr(0, 1);
+	}
+
+	return path.substr(0, separator);
 }
 
 std::wstring GetPathName(const std::wstring& path)
@@ -72,6 +112,37 @@ std::wstring GetPathName(const std::wstring& path)
 	return path.substr(separator + 1, end - separator - 1);
 }
 
+std::wstring GetModuleFilePath(HINSTANCE module)
+{
+	if (module == nullptr)
+	{
+		return L"";
+	}
+
+	std::vector<wchar_t> buffer(MAX_PATH);
+	for (;;)
+	{
+		const DWORD length = GetModuleFileNameW(module, buffer.data(), static_cast<DWORD>(buffer.size()));
+		if (length == 0)
+		{
+			return L"";
+		}
+
+		if (length < buffer.size())
+		{
+			return std::wstring(buffer.data(), length);
+		}
+
+		// GetModuleFileNameW returns the buffer size when it truncates. Grow
+		// instead of silently registering or loading a truncated path.
+		if (buffer.size() >= 32768)
+		{
+			return L"";
+		}
+		buffer.resize(buffer.size() * 2);
+	}
+}
+
 std::wstring ResolveModuleRelativePath(HINSTANCE module, const std::wstring& relativePath)
 {
 	if (relativePath.empty())
@@ -84,23 +155,24 @@ std::wstring ResolveModuleRelativePath(HINSTANCE module, const std::wstring& rel
 		return relativePath;
 	}
 
-	wchar_t modulePath[MAX_PATH] = {};
-	if (module == nullptr || GetModuleFileNameW(module, modulePath, ARRAYSIZE(modulePath)) == 0)
+	const std::wstring modulePath = GetModuleFilePath(module);
+	if (modulePath.empty())
 	{
 		return relativePath;
 	}
 
-	if (!PathRemoveFileSpecW(modulePath))
+	const size_t separator = modulePath.find_last_of(L"\\/");
+	if (separator == std::wstring::npos)
 	{
 		return relativePath;
 	}
 
-	wchar_t combined[MAX_PATH] = {};
-	if (FAILED(StringCchCopyW(combined, ARRAYSIZE(combined), modulePath)) || FAILED(PathAppendW(combined, relativePath.c_str())))
+	std::wstring combined = modulePath.substr(0, separator);
+	if (!combined.empty() && combined.back() != L'\\' && combined.back() != L'/')
 	{
-		return relativePath;
+		combined += L'\\';
 	}
-
+	combined += relativePath;
 	return combined;
 }
 

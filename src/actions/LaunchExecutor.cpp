@@ -1,4 +1,4 @@
-﻿#include "LaunchExecutor.h"
+#include "LaunchExecutor.h"
 
 #include "ActionPlaceholders.h"
 #include "ShellLog.h"
@@ -154,8 +154,9 @@ namespace
 	}
 
 	// Determines the executable to launch from the expanded command line
-	// without ever consulting the current directory.
-	bool TryResolveApplicationName(const std::wstring& commandLine, std::wstring& applicationName)
+	// without ever consulting the current directory. When arguments is
+	// non-null it receives the original argument text after the executable.
+	bool TryResolveApplicationName(const std::wstring& commandLine, std::wstring& applicationName, std::wstring* arguments = nullptr)
 	{
 		size_t start = 0;
 		while (start < commandLine.size() && iswspace(commandLine[start]))
@@ -173,6 +174,11 @@ namespace
 			if (endQuote == std::wstring::npos)
 			{
 				return false;
+			}
+
+			if (arguments != nullptr)
+			{
+				*arguments = commandLine.substr(endQuote + 1);
 			}
 
 			const std::wstring token = commandLine.substr(start + 1, endQuote - start - 1);
@@ -193,10 +199,22 @@ namespace
 
 		if (IsBareExecutableName(tokens[0]))
 		{
+			if (arguments != nullptr)
+			{
+				const size_t firstTokenEnd = commandLine.find_first_of(L" \t\r\n", start);
+				*arguments = firstTokenEnd == std::wstring::npos ? std::wstring() : commandLine.substr(firstTokenEnd);
+			}
 			return TryResolveBareExecutable(tokens[0], applicationName);
 		}
 
-		return TryResolveUnquotedPathedExecutable(tokens, applicationName);
+		const bool resolved = TryResolveUnquotedPathedExecutable(tokens, applicationName);
+		if (resolved && arguments != nullptr)
+		{
+			// The resolved application path is a prefix of the trimmed command
+			// line for the unquoted, whitespace-containing case.
+			*arguments = commandLine.substr(start + applicationName.size());
+		}
+		return resolved;
 	}
 } // namespace
 
@@ -220,15 +238,21 @@ bool LaunchExecutor::Execute(const MenuContext& context, const MenuAction& actio
 	// makes CreateProcessW search the caller's current directory first, which
 	// allowed a planted executable to hijack bare command names.
 	std::wstring applicationName;
-	if (!TryResolveApplicationName(commandLine, applicationName))
+	std::wstring arguments;
+	if (!TryResolveApplicationName(commandLine, applicationName, &arguments))
 	{
 		ShellLog(L"Launch action skipped: could not resolve application from command: %s", commandLine.c_str());
 		return false;
 	}
 
+	// Always rebuild the command line with a quoted application path. For an
+	// unquoted path containing spaces the original text made the child CRT see
+	// a truncated argv[0] and shifted arguments.
+	const std::wstring finalCommandLine = L"\"" + applicationName + L"\"" + arguments;
+
 	STARTUPINFOW startupInfo = {sizeof(startupInfo)};
 	PROCESS_INFORMATION processInfo = {};
-	std::vector<wchar_t> mutableCommand(commandLine.begin(), commandLine.end());
+	std::vector<wchar_t> mutableCommand(finalCommandLine.begin(), finalCommandLine.end());
 	mutableCommand.push_back(L'\0');
 
 	if (!CreateProcessW(applicationName.c_str(), mutableCommand.data(), nullptr, nullptr, FALSE, action.showWindow ? 0 : CREATE_NO_WINDOW, nullptr,

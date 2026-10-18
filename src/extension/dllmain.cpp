@@ -1,4 +1,4 @@
-﻿/****************************** Module Header ******************************\
+/****************************** Module Header ******************************\
 Module Name:  dllmain.cpp
 Project:      CppShellExtContextMenuHandler
 Copyright (c) Microsoft Corporation.
@@ -29,10 +29,13 @@ WARRANTIES OF MERCHANTABILITY AND/OR FITNESS FOR A PARTICULAR PURPOSE.
 
 #include <windows.h>
 #include <Guiddef.h>
+#include <ShlObj.h>
 #include <algorithm>
+#include <new>
 #include <string>
 #include <vector>
 #include "ClassFactory.h" // For the class factory
+#include "PathHelpers.h"
 #include "Reg.h"
 #include "RegistrationConfig.h"
 #include "ShellTarget.h"
@@ -51,22 +54,20 @@ namespace
 {
 	bool GetSiblingFilePath(PCWSTR fileName, std::wstring& path)
 	{
-		wchar_t modulePath[MAX_PATH] = {};
-		const DWORD length = GetModuleFileNameW(g_hInst, modulePath, ARRAYSIZE(modulePath));
-		if (length == 0 || length >= ARRAYSIZE(modulePath))
+		const std::wstring modulePath = GetModuleFilePath(g_hInst);
+		if (modulePath.empty())
 		{
 			return false;
 		}
 
-		path.assign(modulePath, length);
-		const size_t separator = path.find_last_of(L"\\/");
+		const size_t separator = modulePath.find_last_of(L"\\/");
 		if (separator == std::wstring::npos)
 		{
 			return false;
 		}
 
-		path.resize(separator + 1);
-		path.append(fileName);
+		path = modulePath.substr(0, separator + 1);
+		path += fileName;
 		return true;
 	}
 
@@ -132,11 +133,18 @@ STDAPI DllGetClassObject(REFCLSID rclsid, REFIID riid, void** ppv)
 	{
 		hr = E_OUTOFMEMORY;
 
-		ClassFactory* pClassFactory = new ClassFactory();
-		if (pClassFactory)
+		try
 		{
-			hr = pClassFactory->QueryInterface(riid, ppv);
-			pClassFactory->Release();
+			ClassFactory* pClassFactory = new (std::nothrow) ClassFactory();
+			if (pClassFactory)
+			{
+				hr = pClassFactory->QueryInterface(riid, ppv);
+				pClassFactory->Release();
+			}
+		}
+		catch (...)
+		{
+			hr = E_FAIL;
 		}
 	}
 
@@ -163,68 +171,96 @@ STDAPI DllCanUnloadNow(void)
 //
 STDAPI DllRegisterServer(void)
 {
-	wchar_t modulePath[MAX_PATH] = {};
-	if (GetModuleFileNameW(g_hInst, modulePath, ARRAYSIZE(modulePath)) == 0)
-	{
-		return HRESULT_FROM_WIN32(GetLastError());
-	}
-
-	HRESULT hr = RegisterInprocServer(modulePath, CLSID_FileContextMenuExt, L_Friendly_Class_Name, L"Apartment");
-	if (FAILED(hr))
-	{
-		return hr;
-	}
-
-	std::wstring configPath;
-	std::vector<ShellTargetType> registrations;
-	if (!GetSiblingFilePath(L"registration.json", configPath))
-	{
-		registrations = {ShellTargetType::File};
-	}
-	else
-	{
-		const ShellRegistrationConfigStatus configStatus = LoadShellRegistrationConfig(configPath, registrations);
-		if (configStatus == ShellRegistrationConfigStatus::Invalid)
-		{
-			UnregisterInprocServer(CLSID_FileContextMenuExt);
-			return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
-		}
-	}
-
 	std::vector<ShellTargetType> registeredTargets;
-	for (const ShellTargetType targetType : registrations)
+	bool inprocRegistered = false;
+
+	try
 	{
-		hr = RegisterShellTarget(targetType);
+		const std::wstring modulePath = GetModuleFilePath(g_hInst);
+		if (modulePath.empty())
+		{
+			const DWORD lastError = GetLastError();
+			return HRESULT_FROM_WIN32(lastError != ERROR_SUCCESS ? lastError : ERROR_INSUFFICIENT_BUFFER);
+		}
+
+		// Validate the registration configuration before touching the registry.
+		// A bad edit must not disable an existing, working installation.
+		std::wstring configPath;
+		std::vector<ShellTargetType> registrations;
+		if (!GetSiblingFilePath(L"registration.json", configPath))
+		{
+			registrations = {ShellTargetType::File};
+		}
+		else
+		{
+			const ShellRegistrationConfigStatus configStatus = LoadShellRegistrationConfig(configPath, registrations);
+			if (configStatus == ShellRegistrationConfigStatus::Invalid)
+			{
+				ShellLog(L"Invalid shell registration configuration; registry left unchanged: %s", configPath.c_str());
+				return HRESULT_FROM_WIN32(ERROR_INVALID_DATA);
+			}
+		}
+
+		HRESULT hr = RegisterInprocServer(modulePath.c_str(), CLSID_FileContextMenuExt, L_Friendly_Class_Name, L"Apartment");
 		if (FAILED(hr))
 		{
-			UnregisterShellTarget(targetType);
-			for (const ShellTargetType registeredTarget : registeredTargets)
-			{
-				UnregisterShellTarget(registeredTarget);
-			}
-			UnregisterInprocServer(CLSID_FileContextMenuExt);
 			return hr;
 		}
-		registeredTargets.push_back(targetType);
-	}
+		inprocRegistered = true;
 
-	const ShellTargetType knownTargets[] = {ShellTargetType::File, ShellTargetType::Directory, ShellTargetType::DirectoryBackground,
-											ShellTargetType::Drive, ShellTargetType::FileSystemObject};
-	for (const ShellTargetType knownTarget : knownTargets)
-	{
-		if (std::find(registrations.begin(), registrations.end(), knownTarget) == registrations.end())
+		for (const ShellTargetType targetType : registrations)
 		{
-			hr = UnregisterShellTarget(knownTarget);
+			// Track before writing so an exception between a successful
+			// RegisterShellTarget call and the next loop iteration still gets
+			// rolled back by the catch handler.
+			registeredTargets.push_back(targetType);
+			hr = RegisterShellTarget(targetType);
 			if (FAILED(hr))
 			{
-				ShellLog(L"Failed to remove legacy shell registration target; "
-						 L"keeping the current registration: %08X",
-						 hr);
+				for (const ShellTargetType registeredTarget : registeredTargets)
+				{
+					UnregisterShellTarget(registeredTarget);
+				}
+				UnregisterInprocServer(CLSID_FileContextMenuExt);
+				return hr;
 			}
 		}
-	}
 
-	return S_OK;
+		const ShellTargetType knownTargets[] = {ShellTargetType::File, ShellTargetType::Directory, ShellTargetType::DirectoryBackground,
+												ShellTargetType::Drive, ShellTargetType::FileSystemObject};
+		for (const ShellTargetType knownTarget : knownTargets)
+		{
+			if (std::find(registrations.begin(), registrations.end(), knownTarget) == registrations.end())
+			{
+				hr = UnregisterShellTarget(knownTarget);
+				if (FAILED(hr))
+				{
+					ShellLog(L"Failed to remove legacy shell registration target; "
+							 L"keeping the current registration: %08X",
+							 hr);
+				}
+			}
+		}
+
+		SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+		return S_OK;
+	}
+	catch (...)
+	{
+		// Best-effort rollback if an allocation or unexpected exception occurs
+		// after the registry was modified.
+		for (const ShellTargetType registeredTarget : registeredTargets)
+		{
+			UnregisterShellTarget(registeredTarget);
+		}
+		if (inprocRegistered)
+		{
+			UnregisterInprocServer(CLSID_FileContextMenuExt);
+		}
+		SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+		OutputDebugStringW(L"[ShellExt] Unhandled exception in DllRegisterServer\n");
+		return E_FAIL;
+	}
 }
 
 //
@@ -234,16 +270,25 @@ STDAPI DllRegisterServer(void)
 //
 STDAPI DllUnregisterServer(void)
 {
-	HRESULT firstFailure = S_OK;
-	const ShellTargetType knownTargets[] = {ShellTargetType::File, ShellTargetType::Directory, ShellTargetType::DirectoryBackground,
-											ShellTargetType::Drive, ShellTargetType::FileSystemObject};
-
-	for (const ShellTargetType targetType : knownTargets)
+	try
 	{
-		SetFirstFailure(UnregisterShellTarget(targetType), firstFailure);
+		HRESULT firstFailure = S_OK;
+		const ShellTargetType knownTargets[] = {ShellTargetType::File, ShellTargetType::Directory, ShellTargetType::DirectoryBackground,
+												ShellTargetType::Drive, ShellTargetType::FileSystemObject};
+
+		for (const ShellTargetType targetType : knownTargets)
+		{
+			SetFirstFailure(UnregisterShellTarget(targetType), firstFailure);
+		}
+
+		SetFirstFailure(UnregisterInprocServer(CLSID_FileContextMenuExt), firstFailure);
+		SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST, nullptr, nullptr);
+
+		return firstFailure;
 	}
-
-	SetFirstFailure(UnregisterInprocServer(CLSID_FileContextMenuExt), firstFailure);
-
-	return firstFailure;
+	catch (...)
+	{
+		OutputDebugStringW(L"[ShellExt] Unhandled exception in DllUnregisterServer\n");
+		return E_FAIL;
+	}
 }

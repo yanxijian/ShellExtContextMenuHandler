@@ -1,15 +1,21 @@
-﻿#include "RegistrationConfig.h"
+#include "RegistrationConfig.h"
 
 #include "ShellLog.h"
 
+#include <nlohmann/json.hpp>
+
 #include <algorithm>
+#include <cstdint>
 #include <cstdio>
+#include <string>
 #include <vector>
 #include <windows.h>
 
 namespace
 {
-	bool ReadUtf8File(const std::wstring& path, std::wstring& content)
+	using Json = nlohmann::json;
+
+	bool ReadUtf8File(const std::wstring& path, std::string& content)
 	{
 		FILE* file = nullptr;
 		if (_wfopen_s(&file, path.c_str(), L"rb") != 0 || file == nullptr)
@@ -38,99 +44,34 @@ namespace
 		}
 
 		fclose(file);
-		if (bytes.empty())
+		content.assign(bytes.begin(), bytes.end());
+
+		if (content.size() >= 3 && static_cast<unsigned char>(content[0]) == 0xEF
+			&& static_cast<unsigned char>(content[1]) == 0xBB && static_cast<unsigned char>(content[2]) == 0xBF)
 		{
-			content.clear();
+			content.erase(0, 3);
+		}
+
+		return true;
+	}
+
+	bool Utf8ToWide(const std::string& value, std::wstring& wide)
+	{
+		if (value.empty())
+		{
+			wide.clear();
 			return true;
 		}
 
-		const int wideLength = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), nullptr, 0);
-		if (wideLength <= 0)
+		const int length = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), nullptr, 0);
+		if (length <= 0)
 		{
 			return false;
 		}
 
-		std::vector<wchar_t> wideBuffer(static_cast<size_t>(wideLength));
-		if (MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, bytes.data(), static_cast<int>(bytes.size()), wideBuffer.data(), wideLength)
-			<= 0)
-		{
-			return false;
-		}
-
-		content.assign(wideBuffer.begin(), wideBuffer.end());
-		return true;
-	}
-
-	bool ExtractStringArray(const std::wstring& json, PCWSTR key, std::vector<std::wstring>& values)
-	{
-		const std::wstring keyPattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPosition = json.find(keyPattern);
-		if (keyPosition == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPosition = json.find(L':', keyPosition + keyPattern.size());
-		const size_t arrayStart = json.find(L'[', colonPosition);
-		const size_t arrayEnd = json.find(L']', arrayStart);
-		if (colonPosition == std::wstring::npos || arrayStart == std::wstring::npos || arrayEnd == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const std::wstring arrayBody = json.substr(arrayStart + 1, arrayEnd - arrayStart - 1);
-		size_t position = 0;
-		while (position < arrayBody.size())
-		{
-			const size_t startQuote = arrayBody.find(L'"', position);
-			if (startQuote == std::wstring::npos)
-			{
-				break;
-			}
-
-			const size_t endQuote = arrayBody.find(L'"', startQuote + 1);
-			if (endQuote == std::wstring::npos)
-			{
-				return false;
-			}
-
-			values.push_back(arrayBody.substr(startQuote + 1, endQuote - startQuote - 1));
-			position = endQuote + 1;
-		}
-
-		return true;
-	}
-
-	bool ExtractUIntValue(const std::wstring& json, PCWSTR key, UINT& value)
-	{
-		const std::wstring keyPattern = std::wstring(L"\"") + key + L"\"";
-		const size_t keyPosition = json.find(keyPattern);
-		if (keyPosition == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t colonPosition = json.find(L':', keyPosition + keyPattern.size());
-		if (colonPosition == std::wstring::npos)
-		{
-			return false;
-		}
-
-		const size_t valueStart = json.find_first_not_of(L" \t\r\n", colonPosition + 1);
-		if (valueStart == std::wstring::npos)
-		{
-			return false;
-		}
-
-		wchar_t* end = nullptr;
-		const unsigned long parsed = wcstoul(json.c_str() + valueStart, &end, 10);
-		if (end == json.c_str() + valueStart || parsed > UINT_MAX)
-		{
-			return false;
-		}
-
-		value = static_cast<UINT>(parsed);
-		return true;
+		wide.resize(static_cast<size_t>(length));
+		return MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, value.data(), static_cast<int>(value.size()), wide.data(), length)
+			   == length;
 	}
 
 	void SetDefaultRegistrations(std::vector<ShellTargetType>& registrations)
@@ -143,37 +84,64 @@ ShellRegistrationConfigStatus LoadShellRegistrationConfig(const std::wstring& co
 {
 	registrations.clear();
 
-	std::wstring json;
-	std::vector<std::wstring> configuredTargets;
-	if (!ReadUtf8File(configPath, json))
+	std::string jsonText;
+	if (!ReadUtf8File(configPath, jsonText))
 	{
 		SetDefaultRegistrations(registrations);
 		ShellLog(L"Using default shell registration target: file");
 		return ShellRegistrationConfigStatus::Missing;
 	}
 
-	UINT schemaVersion = 0;
-	if (!ExtractUIntValue(json, L"schemaVersion", schemaVersion) || schemaVersion != 1
-		|| !ExtractStringArray(json, L"shellRegistrations", configuredTargets) || configuredTargets.empty())
+	const Json root = Json::parse(jsonText, nullptr, false);
+	if (root.is_discarded() || !root.is_object())
 	{
 		ShellLog(L"Invalid shell registration configuration: %s", configPath.c_str());
 		return ShellRegistrationConfigStatus::Invalid;
 	}
 
-	for (const auto& configuredTarget : configuredTargets)
+	const auto schemaVersion = root.find("schemaVersion");
+	if (schemaVersion == root.end() || !schemaVersion->is_number_unsigned() || schemaVersion->get<std::uint64_t>() != 1)
 	{
-		ShellTargetType targetType;
-		if (!ParseShellTargetType(configuredTarget, targetType))
+		ShellLog(L"Unsupported shell registration schema version: %s", configPath.c_str());
+		return ShellRegistrationConfigStatus::Invalid;
+	}
+
+	const auto configuredTargets = root.find("shellRegistrations");
+	if (configuredTargets == root.end() || !configuredTargets->is_array() || configuredTargets->empty())
+	{
+		ShellLog(L"Invalid shell registration target list: %s", configPath.c_str());
+		return ShellRegistrationConfigStatus::Invalid;
+	}
+
+	for (const auto& element : *configuredTargets)
+	{
+		if (!element.is_string() || element.get_ref<const std::string&>().empty())
 		{
+			ShellLog(L"Invalid shell registration target entry: %s", configPath.c_str());
 			registrations.clear();
-			ShellLog(L"Unknown shell registration target: %s", configuredTarget.c_str());
+			return ShellRegistrationConfigStatus::Invalid;
+		}
+
+		std::wstring targetName;
+		if (!Utf8ToWide(element.get_ref<const std::string&>(), targetName))
+		{
+			ShellLog(L"Invalid UTF-8 in shell registration target: %s", configPath.c_str());
+			registrations.clear();
+			return ShellRegistrationConfigStatus::Invalid;
+		}
+
+		ShellTargetType targetType;
+		if (!ParseShellTargetType(targetName, targetType))
+		{
+			ShellLog(L"Unknown shell registration target: %s", targetName.c_str());
+			registrations.clear();
 			return ShellRegistrationConfigStatus::Invalid;
 		}
 
 		if (std::find(registrations.begin(), registrations.end(), targetType) != registrations.end())
 		{
+			ShellLog(L"Duplicate shell registration target: %s", targetName.c_str());
 			registrations.clear();
-			ShellLog(L"Duplicate shell registration target: %s", configuredTarget.c_str());
 			return ShellRegistrationConfigStatus::Invalid;
 		}
 

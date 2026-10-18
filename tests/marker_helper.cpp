@@ -1,4 +1,4 @@
-﻿#include <windows.h>
+#include <windows.h>
 #include <cstdio>
 
 int wmain(int argc, wchar_t** argv)
@@ -21,6 +21,11 @@ int wmain(int argc, wchar_t** argv)
 	}
 
 	fwprintf(f, L"%s\n", self);
+	fwprintf(f, L"argc=%d\n", argc);
+	for (int i = 0; i < argc; ++i)
+	{
+		fwprintf(f, L"argv[%d]=%s\n", i, argv[i]);
+	}
 	fclose(f);
 	return 0;
 }

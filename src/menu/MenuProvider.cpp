@@ -1,9 +1,10 @@
-﻿#include "MenuProvider.h"
+#include "MenuProvider.h"
 
 #include "ContextBuilder.h"
 #include "ExecutorRegistry.h"
 #include "GateRegistry.h"
 #include "MenuConfig.h"
+#include "PathHelpers.h"
 #include "ShellLog.h"
 
 #include <Shlwapi.h>
@@ -12,19 +13,89 @@
 
 #pragma comment(lib, "shlwapi.lib")
 
+namespace
+{
+	std::wstring NormalizeGateName(const std::wstring& name)
+	{
+		const std::wstring prefix = L"custom:";
+		if (name.size() > prefix.size() && _wcsnicmp(name.c_str(), prefix.c_str(), static_cast<int>(prefix.size())) == 0)
+		{
+			return name.substr(prefix.size());
+		}
+		return name;
+	}
+
+	bool HasExtensionGate(const std::wstring& name)
+	{
+		return GateRegistry::Instance().GetExtensionGate(NormalizeGateName(name)) != nullptr;
+	}
+
+	bool HasItemGate(const std::wstring& name)
+	{
+		return GateRegistry::Instance().GetItemGate(NormalizeGateName(name)) != nullptr;
+	}
+
+	bool HasPresentationGate(const std::wstring& name)
+	{
+		return GateRegistry::Instance().GetPresentationGate(NormalizeGateName(name)) != nullptr;
+	}
+
+	bool HasExecutor(const std::wstring& name)
+	{
+		return ExecutorRegistry::Instance().GetExecutor(name) != nullptr;
+	}
+
+	template <typename Predicate>
+	bool ValidateChain(const std::wstring& kind, const std::vector<std::wstring>& names, Predicate&& exists)
+	{
+		for (const auto& name : names)
+		{
+			if (!exists(name))
+			{
+				ShellLog(L"Unknown %s name in menu.json: %s", kind.c_str(), name.c_str());
+				return false;
+			}
+		}
+		return true;
+	}
+
+	bool ValidateConfigChains(const MenuConfigDocument& document)
+	{
+		if (!ValidateChain(L"extension gate", document.globalChains.extensionGates, HasExtensionGate)
+			|| !ValidateChain(L"item gate", document.globalChains.itemGates, HasItemGate)
+			|| !ValidateChain(L"presentation gate", document.globalChains.presentationGates, HasPresentationGate)
+			|| !ValidateChain(L"executor", document.globalChains.executors, HasExecutor))
+		{
+			return false;
+		}
+
+		for (const auto& item : document.items)
+		{
+			if (!ValidateChain(L"extension gate", item.extensionGates, HasExtensionGate)
+				|| !ValidateChain(L"item gate", item.itemGates, HasItemGate)
+				|| !ValidateChain(L"presentation gate", item.presentationGates, HasPresentationGate)
+				|| !ValidateChain(L"executor", item.executors, HasExecutor))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
+} // namespace
+
 MenuProvider::MenuProvider(HINSTANCE moduleInstance)
 	: m_moduleInstance(moduleInstance)
 	, m_configLoaded(false)
 	, m_initialized(false)
 {
-	wchar_t modulePath[MAX_PATH] = {};
-	if (GetModuleFileNameW(moduleInstance, modulePath, ARRAYSIZE(modulePath)) != 0)
+	const std::wstring modulePath = GetModuleFilePath(moduleInstance);
+	if (!modulePath.empty())
 	{
-		wchar_t configPath[MAX_PATH] = {};
-		if (SUCCEEDED(StringCchCopy(configPath, ARRAYSIZE(configPath), modulePath)) && PathRemoveFileSpecW(configPath))
+		const size_t separator = modulePath.find_last_of(L"\\/");
+		if (separator != std::wstring::npos)
 		{
-			StringCchCatW(configPath, ARRAYSIZE(configPath), L"\\menu.json");
-			m_configPath = configPath;
+			m_configPath = modulePath.substr(0, separator + 1) + L"menu.json";
 		}
 	}
 }
@@ -37,14 +108,28 @@ void MenuProvider::EnsureConfigLoaded()
 	}
 
 	MenuConfigDocument document;
+	bool loaded = false;
 	if (m_configPath.empty())
 	{
 		document.items = GetBuiltinMenuItems();
 		ApplyDefaultMenuGateChains(document.globalChains);
+		loaded = true;
 	}
 	else
 	{
-		LoadMenuConfigDocument(m_configPath, document);
+		loaded = LoadMenuConfigDocument(m_configPath, document);
+		if (loaded && !ValidateConfigChains(document))
+		{
+			ShellLog(L"Invalid chain configuration, using built-in menu: %s", m_configPath.c_str());
+			loaded = false;
+		}
+	}
+
+	if (!loaded)
+	{
+		document = {};
+		document.items = GetBuiltinMenuItems();
+		ApplyDefaultMenuGateChains(document.globalChains);
 	}
 
 	m_globalChains = document.globalChains;

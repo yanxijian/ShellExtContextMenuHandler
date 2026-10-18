@@ -1,4 +1,4 @@
-﻿#include "IconProviderRegistry.h"
+#include "IconProviderRegistry.h"
 
 #include "BitmapFileIconProvider.h"
 #include "DefaultResourceIconProvider.h"
@@ -8,14 +8,13 @@
 
 IconProviderRegistry& IconProviderRegistry::Instance()
 {
-	static IconProviderRegistry registry;
-	static bool providersRegistered = false;
-	if (!providersRegistered)
+	static IconProviderRegistry* const registry = []()
 	{
-		registry.RegisterBuiltInProviders();
-		providersRegistered = true;
-	}
-	return registry;
+		auto* instance = new IconProviderRegistry();
+		instance->RegisterBuiltInProviders();
+		return instance;
+	}();
+	return *registry;
 }
 
 void IconProviderRegistry::RegisterProvider(const std::wstring& name, std::unique_ptr<IIconProvider> provider)

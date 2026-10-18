@@ -1,4 +1,4 @@
-﻿#include "OsVersion.h"
+#include "OsVersion.h"
 
 namespace
 {
@@ -16,36 +16,34 @@ namespace
 
 	const OsVersionInfo& QueryOsVersion()
 	{
-		static OsVersionInfo cached;
-		static bool initialized = false;
-		if (initialized)
+		static const OsVersionInfo cached = []()
 		{
-			return cached;
-		}
+			OsVersionInfo info;
+			HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+			if (ntdll == nullptr)
+			{
+				return info;
+			}
 
-		initialized = true;
-		HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
-		if (ntdll == nullptr)
-		{
-			return cached;
-		}
+			const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion"));
+			if (rtlGetVersion == nullptr)
+			{
+				return info;
+			}
 
-		const auto rtlGetVersion = reinterpret_cast<RtlGetVersionFn>(GetProcAddress(ntdll, "RtlGetVersion"));
-		if (rtlGetVersion == nullptr)
-		{
-			return cached;
-		}
+			RtlOsVersionInfo version = {};
+			version.osVersionInfoSize = sizeof(version);
+			if (rtlGetVersion(&version) != 0)
+			{
+				return info;
+			}
 
-		RtlOsVersionInfo version = {};
-		version.osVersionInfoSize = sizeof(version);
-		if (rtlGetVersion(&version) != 0)
-		{
-			return cached;
-		}
+			info.major = version.majorVersion;
+			info.minor = version.minorVersion;
+			info.build = version.buildNumber;
+			return info;
+		}();
 
-		cached.major = version.majorVersion;
-		cached.minor = version.minorVersion;
-		cached.build = version.buildNumber;
 		return cached;
 	}
 } // namespace

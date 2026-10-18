@@ -27,6 +27,11 @@ function(shellext_test_target target)
     )
 endfunction()
 
+# --- COM boundary exception guard --------------------------------------------
+add_executable(shellext_test_com_guard test_com_guard.cpp)
+shellext_test_target(shellext_test_com_guard)
+add_test(NAME com_guard COMMAND shellext_test_com_guard)
+
 # --- menu.json parsing (nlohmann/json based) ---------------------------------
 add_executable(shellext_test_menu_config
     test_menu_config.cpp
@@ -56,6 +61,14 @@ add_executable(shellext_test_context_builder test_context_builder.cpp)
 shellext_test_target(shellext_test_context_builder)
 target_link_libraries(shellext_test_context_builder PRIVATE Ole32 Shell32 Advapi32)
 add_test(NAME context_builder COMMAND shellext_test_context_builder)
+
+# --- registration.json parsing -----------------------------------------------
+add_executable(shellext_test_registration_config
+    test_registration_config.cpp
+    ../src/context/ShellTarget.cpp
+)
+shellext_test_target(shellext_test_registration_config)
+add_test(NAME registration_config COMMAND shellext_test_registration_config)
 
 # --- launch executor / current-directory hijack regression --------------------
 add_executable(shellext_marker_helper marker_helper.cpp)

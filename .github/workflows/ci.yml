@@ -6,25 +6,42 @@ on:
   pull_request:
     branches: [master, main]
 
+permissions:
+  contents: read
+
 jobs:
   build-and-validate:
     runs-on: windows-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: Release
+            arch: x64
+          - config: Debug
+            arch: x64
+          - config: Release
+            arch: Win32
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Setup CMake
-        uses: lukka/get-cmake@latest
+        uses: lukka/get-cmake@a89e43e22a96abafcd7a62db652a65ecd33052c9
         with:
           cmakeVersion: "4.3.2"
 
       - name: Configure CMake
-        run: cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
+        run: cmake -S . -B build -G "Visual Studio 18 2026" -A ${{ matrix.arch }} -DSHELLEXT_BUILD_TESTS=ON
 
-      - name: Build Release
-        run: cmake --build build --config Release
+      - name: Build
+        run: cmake --build build --config ${{ matrix.config }}
 
       - name: Run unit tests
-        run: ctest --test-dir build -C Release --output-on-failure
+        run: ctest --test-dir build -C ${{ matrix.config }} --output-on-failure
 
-      - name: Validate menu.json
+      - name: Validate configuration
         run: python tools/validate_menu_json.py
+
+      - name: Check whitespace
+        run: git -c core.whitespace=cr-at-eol diff --check

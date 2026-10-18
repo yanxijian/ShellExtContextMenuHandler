@@ -1,4 +1,4 @@
-﻿#include "DpiProvider.h"
+#include "DpiProvider.h"
 
 #include "OsVersion.h"
 #include "ShellLog.h"
@@ -17,31 +17,27 @@ namespace
 
 	GetDpiForMonitorFn ResolveGetDpiForMonitor()
 	{
-		static GetDpiForMonitorFn cached = nullptr;
-		static bool resolved = false;
-		if (resolved)
+		static const GetDpiForMonitorFn cached = []() -> GetDpiForMonitorFn
 		{
-			return cached;
-		}
+			if (!IsWindows81OrGreater())
+			{
+				return nullptr;
+			}
 
-		resolved = true;
-		if (!IsWindows81OrGreater())
-		{
-			return nullptr;
-		}
+			HMODULE shcore = LoadLibraryW(L"Shcore.dll");
+			if (shcore == nullptr)
+			{
+				ShellLog(L"DpiProvider: Shcore.dll not available, using system DPI.");
+				return nullptr;
+			}
 
-		HMODULE shcore = LoadLibraryW(L"Shcore.dll");
-		if (shcore == nullptr)
-		{
-			ShellLog(L"DpiProvider: Shcore.dll not available, using system DPI.");
-			return nullptr;
-		}
-
-		cached = reinterpret_cast<GetDpiForMonitorFn>(GetProcAddress(shcore, "GetDpiForMonitor"));
-		if (cached == nullptr)
-		{
-			ShellLog(L"DpiProvider: GetDpiForMonitor not found, using system DPI.");
-		}
+			const GetDpiForMonitorFn function = reinterpret_cast<GetDpiForMonitorFn>(GetProcAddress(shcore, "GetDpiForMonitor"));
+			if (function == nullptr)
+			{
+				ShellLog(L"DpiProvider: GetDpiForMonitor not found, using system DPI.");
+			}
+			return function;
+		}();
 
 		return cached;
 	}
@@ -80,13 +76,12 @@ namespace DpiProvider
 {
 	UINT GetSystemDpi()
 	{
-		static UINT cachedDpi = 0;
-		if (cachedDpi == 0)
+		static const UINT cachedDpi = []()
 		{
-			cachedDpi = ReadSystemDpi();
-			ShellLog(L"DpiProvider: system DPI = %u", cachedDpi);
-		}
-
+			const UINT dpi = ReadSystemDpi();
+			ShellLog(L"DpiProvider: system DPI = %u", dpi);
+			return dpi;
+		}();
 		return cachedDpi;
 	}
 

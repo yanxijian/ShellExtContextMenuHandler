@@ -1,4 +1,4 @@
-﻿#include "ExecutorRegistry.h"
+#include "ExecutorRegistry.h"
 
 #include "DemoActionLogExecutor.h"
 #include "LaunchExecutor.h"
@@ -7,14 +7,13 @@
 
 ExecutorRegistry& ExecutorRegistry::Instance()
 {
-	static ExecutorRegistry registry;
-	static bool executorsRegistered = false;
-	if (!executorsRegistered)
+	static ExecutorRegistry* const registry = []()
 	{
-		registry.RegisterBuiltInExecutors();
-		executorsRegistered = true;
-	}
-	return registry;
+		auto* instance = new ExecutorRegistry();
+		instance->RegisterBuiltInExecutors();
+		return instance;
+	}();
+	return *registry;
 }
 
 void ExecutorRegistry::RegisterExecutor(const std::wstring& name, std::unique_ptr<IActionExecutor> executor)

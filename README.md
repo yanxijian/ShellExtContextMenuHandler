@@ -17,13 +17,15 @@
 - 默认注册五类 Shell 目标：文件、目录、目录背景、驱动器和文件系统对象。
 - 使用 `config/menu.json` 配置菜单项、目标过滤、选择过滤、Gate/Executor 链和动作参数。
 - 使用 `config/registration.json` 控制 DLL 注册到哪些 Shell 注册位置。
+- 严格校验配置：字段类型错误、未知 Gate/Executor、未知 `actionType`、重复 `id` 等会让整份配置失效并回退内置菜单，不会静默放宽过滤条件。
+- 注册前先校验 `registration.json`；无效配置不会修改已有注册表。注册/卸载成功后会通知 Shell 刷新关联。
 - 支持 `messageBox` 和 `launch` 动作，以及自定义 Executor。
 - 支持 SVG/BMP 图标，SVG 由现有 NanoSVG 提供器加载并按 DPI 栅格化。
 - 三层 Gate：Extension、Item、Presentation，可分别控制扩展参与、菜单候选和最终显示状态。
 - 内置 Gate：`extensionPass`、`jsonFilter`、`presentationPass`、`demo:hideTemp`、`demo:readOnlyDisable`；内置 Executor：`messageBox`、`launch`、`demo:actionLog`。
-- 构建输出包含可双击的 `register.bat` 和 `unregister.bat`，会请求管理员权限调用 `regsvr32`。
+- 构建输出包含可双击的 `register.bat` 和 `unregister.bat`，会请求管理员权限调用 `regsvr32`；脚本会根据 DLL 位数选择 `System32` 或 `SysWOW64`。
 - 通过 `OutputDebugString` 输出 `[ShellExt]` 调试日志。
-- 内置 CTest 单元测试覆盖配置解析、占位符展开、上下文构建和启动命令解析，CI 自动运行。
+- 内置 CTest 单元测试覆盖配置解析、占位符展开、上下文构建、启动命令解析、注册配置解析和 COM 异常边界，CI 自动运行。
 
 ## 快速开始
 
@@ -32,7 +34,7 @@
 - Windows x64
 - Visual Studio 2026 C++ 工具链
 - CMake 3.20 或更高版本
-- Python 3，用于配置校验
+- Python 3.9 或更高版本，用于配置校验
 
 项目的设计目标是 Windows 7 SP1 及之后版本，但发布前必须在目标 Windows 版本和对应位数的 Explorer 中验证。
 
@@ -46,6 +48,8 @@ python tools/validate_menu_json.py
 ```
 
 单元测试默认关闭（`SHELLEXT_BUILD_TESTS=ON` 启用），位于 `tests/`，直接编译真实源码而非副本。
+
+DLL 默认静态链接 MSVC CRT（`/MT`），目标机不需要额外安装 VC++ 运行库；代价是 DLL 体积略大。
 
 也可以运行 `tools/generate-vs.ps1` 生成 Visual Studio 工程。
 
@@ -71,7 +75,9 @@ icons/
 .\tools\register.ps1 -Action unregister
 ```
 
-使用 `register.ps1` 时，脚本会把 `menu.json`、`registration.json` 和 `config/icons/` 复制到 DLL 同目录。更新 DLL 或配置后，先卸载再重新注册；Explorer 缓存未刷新时可重启 Explorer。
+使用 `register.ps1` 时，脚本会先校验两个 JSON 的格式和 registration 目标（本机有 Python 时还会运行完整校验器），复制 `registration.json` 后调用 `regsvr32`，注册成功后再复制 `menu.json` 和 `config/icons/`；注册失败会恢复原来的 `registration.json`。更新 DLL 或配置后，先卸载再重新注册；注册/卸载成功会发送 `SHChangeNotify`，通常无需重启 Explorer。`registration.json` 无效时注册直接失败，不会修改已有注册表。
+
+`register.bat`/`unregister.bat` 和 `register.ps1` 会根据 DLL 的 PE 位数选择匹配的 `regsvr32`（64 位用 `System32`，32 位用 `SysWOW64`）。
 
 ### 手动验证
 
@@ -116,6 +122,7 @@ icons/
 
 ```json
 {
+  "schemaVersion": 1,
   "extensionGates": ["extensionPass"],
   "itemGates": ["jsonFilter"],
   "presentationGates": ["presentationPass"],
@@ -126,13 +133,14 @@ icons/
 
 | 字段 | 说明 |
 |------|------|
+| `schemaVersion` | 可选；当前只接受 `1`，后续格式变更时用于拒绝不兼容配置 |
 | `extensionGates` | Gate 1 链；决定当前扩展是否参与 |
 | `itemGates` | Gate 2 链；决定菜单项是否进入候选集，`gates` 是兼容别名 |
 | `presentationGates` | Gate 3 链；决定隐藏、禁用或启用 |
 | `executors` | 默认动作执行器链 |
 | `menuItems` | 菜单项定义数组 |
 
-`menu.json` 必须是 UTF-8 编码（可带 BOM），由 `third_party/nlohmann/json` 解析；字段类型不匹配视为配置错误，回退到内置菜单。
+`menu.json` 必须是 UTF-8 编码（可带 BOM），由 `third_party/nlohmann/json` 解析；字段类型不匹配、未知 Gate/Executor、未知 `actionType`、重复 `id` 等整份配置错误会回退到内置菜单。未知 Gate/Executor 名称不会被静默忽略。
 
 菜单项链字段的覆盖语义：显式配置的链**整体替换**根级默认链，而不是追加；根级默认链只在配置缺失或为空时使用。
 
@@ -183,7 +191,9 @@ icons/
 
 ### 超长路径
 
-选中对象路径不受 `MAX_PATH` 限制，完整保留到上下文和占位符中。
+选中对象路径不受 `MAX_PATH` 限制，`%1`、`%*`、`%N`、`%D` 都基于动态 `std::wstring` 处理。目录背景路径会优先尝试 `SHGetPathFromIDListEx`，并回退到 `SHGetPathFromIDListW`。文件属性读取在普通路径失败时会尝试 `\\?\` 扩展路径。
+
+注意：真正超过 `MAX_PATH` 的路径仍需要系统启用 long path 策略，且 Explorer 进程本身支持长路径；否则 Shell 不会把该类路径传给扩展。详细验证见架构文档。
 
 ## 二次开发
 
@@ -233,7 +243,7 @@ Extension Gate 返回是否继续参与；Item Gate 返回是否进入候选集�
 
 ```text
 config/                 运行时菜单、注册目标和图标
-src/extension/          COM DLL 入口和 Shell 扩展对象
+src/extension/          COM DLL 入口、ClassFactory、FileContextMenuExt、ComGuard
 src/context/            选择上下文和 Shell 目标识别
 src/gates/              Gate 接口、注册表和内置 Gate
 src/actions/            Executor 接口、注册表和动作实现
@@ -242,19 +252,20 @@ src/menu/               配置、过滤、菜单插入和命令执行
 src/registry/           COM/Shell 注册表辅助
 tools/                  构建辅助、注册脚本和配置校验
 tests/                  CTest 单元测试
-third_party/            第三方库（nlohmann/json）
+third_party/            第三方库（nlohmann/json、NanoSVG）
 docs/                   架构与验证文档
 ```
 
 ## 注意事项
 
-- 64 位 Explorer 需要 64 位 DLL；32 位 Explorer 需要对应位数 DLL。
+- 64 位 Explorer 需要 64 位 DLL；32 位 Explorer 需要对应位数 DLL。注册脚本会自动选择 `System32`/`SysWOW64` 的 `regsvr32`。
 - COM 注册需要管理员权限。
-- Win7 支持是设计目标，发布前必须在 Win7 SP1 x64 虚拟机完成回归。
+- Win7 支持是设计目标，发布前必须在 Win7 SP1 x64 虚拟机完成回归；当前 VS 2026 工具链和静态 CRT 对 Win7 的支持需要单独验证，若不支持则需换用受支持的旧工具链重新构建。
+- DLL 静态链接 MSVC CRT；若你自己的扩展新增依赖，请重新评估目标机运行库。
 - 不要修改 `build/`、`build-*` 或第三方目录中的生成文件。
 
 ## COM 标识与许可证
 
 发布 Fork 时请修改 `src/extension/dllmain.cpp` 中的 `CLSID_FileContextMenuExt` 以及 `include/shell_ext/common.h` 中的友好名称。
 
-本项目派生自微软示例，源文件保留微软原始版权头，许可证为 [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)。
+本项目派生自微软示例，源文件保留微软原始版权头，许可证为 [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)。完整许可证文本见仓库根目录 `LICENSE`；nlohmann/json 和 NanoSVG 的第三方声明见 `THIRD_PARTY_NOTICES.md`。

@@ -1,4 +1,4 @@
-﻿#include "MenuConfig.h"
+#include "MenuConfig.h"
 
 #include "MenuGateChains.h"
 #include "ShellLog.h"
@@ -8,6 +8,9 @@
 
 #include <cstdint>
 #include <climits>
+#include <cstring>
+#include <mutex>
+#include <set>
 #include <string>
 #include <vector>
 #include <windows.h>
@@ -239,6 +242,241 @@ namespace
 		GetStringArray(root, "presentationGates", chains.presentationGates);
 		GetStringArray(root, "executors", chains.executors);
 	}
+
+	std::wstring FieldName(const char* key)
+	{
+		return std::wstring(key, key + std::strlen(key));
+	}
+
+	bool ValidateOptionalString(const Json& object, const char* key, std::wstring& error, bool required = false)
+	{
+		const auto field = object.find(key);
+		if (field == object.end())
+		{
+			if (required)
+			{
+				error = L"missing required field '" + FieldName(key) + L"'";
+				return false;
+			}
+			return true;
+		}
+
+		if (!field->is_string())
+		{
+			error = L"field '" + FieldName(key) + L"' must be a string";
+			return false;
+		}
+
+		if (required && field->get_ref<const std::string&>().empty())
+		{
+			error = L"field '" + FieldName(key) + L"' must not be empty";
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateOptionalBool(const Json& object, const char* key, std::wstring& error)
+	{
+		const auto field = object.find(key);
+		if (field == object.end())
+		{
+			return true;
+		}
+
+		if (!field->is_boolean())
+		{
+			error = L"field '" + FieldName(key) + L"' must be a boolean";
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateOptionalUInt(const Json& object, const char* key, std::wstring& error)
+	{
+		const auto field = object.find(key);
+		if (field == object.end())
+		{
+			return true;
+		}
+
+		if (!field->is_number_unsigned() || field->get<std::uint64_t>() > UINT_MAX)
+		{
+			error = L"field '" + FieldName(key) + L"' must be an unsigned 32-bit integer";
+			return false;
+		}
+
+		return true;
+	}
+
+	bool ValidateOptionalStringArray(const Json& object, const char* key, std::wstring& error)
+	{
+		const auto field = object.find(key);
+		if (field == object.end())
+		{
+			return true;
+		}
+
+		if (!field->is_array())
+		{
+			error = L"field '" + FieldName(key) + L"' must be an array of strings";
+			return false;
+		}
+
+		for (const auto& element : *field)
+		{
+			if (!element.is_string() || element.get_ref<const std::string&>().empty())
+			{
+				error = L"field '" + FieldName(key) + L"' contains an empty or non-string element";
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ValidateTargets(const Json& item, std::wstring& error)
+	{
+		const auto field = item.find("targets");
+		if (field == item.end())
+		{
+			return true;
+		}
+
+		if (!field->is_array())
+		{
+			error = L"field 'targets' must be an array of shell target names";
+			return false;
+		}
+
+		for (const auto& element : *field)
+		{
+			if (!element.is_string() || element.get_ref<const std::string&>().empty())
+			{
+				error = L"field 'targets' contains an empty or non-string element";
+				return false;
+			}
+
+			const std::wstring targetName = Utf8ToWide(element.get_ref<const std::string&>());
+			ShellTargetType targetType;
+			if (!ParseShellTargetType(targetName, targetType))
+			{
+				error = L"field 'targets' contains an unknown target: " + targetName;
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ValidateMenuItem(const Json& item, size_t index, std::set<std::string>& ids, std::wstring& error)
+	{
+		if (!item.is_object())
+		{
+			error = L"menuItems[" + std::to_wstring(index) + L"] must be an object";
+			return false;
+		}
+
+		if (!ValidateOptionalString(item, "id", error, true) || !ValidateOptionalString(item, "label", error, true)
+			|| !ValidateOptionalString(item, "verb", error, true))
+		{
+			return false;
+		}
+
+		const std::string id = item["id"].get<std::string>();
+		if (!ids.insert(id).second)
+		{
+			error = L"duplicate menu item id: " + Utf8ToWide(id);
+			return false;
+		}
+
+		if (!ValidateOptionalString(item, "helpText", error) || !ValidateOptionalString(item, "canonicalName", error)
+			|| !ValidateOptionalString(item, "icon", error) || !ValidateOptionalString(item, "actionTitle", error)
+			|| !ValidateOptionalString(item, "actionTemplate", error) || !ValidateOptionalString(item, "actionCommand", error)
+			|| !ValidateOptionalBool(item, "separatorAfter", error) || !ValidateOptionalBool(item, "filesOnly", error)
+			|| !ValidateOptionalBool(item, "foldersOnly", error) || !ValidateOptionalBool(item, "actionShowWindow", error)
+			|| !ValidateOptionalUInt(item, "minSelection", error) || !ValidateOptionalUInt(item, "maxSelection", error)
+			|| !ValidateOptionalStringArray(item, "extensions", error) || !ValidateOptionalStringArray(item, "excludeExtensions", error)
+			|| !ValidateOptionalStringArray(item, "extensionGates", error) || !ValidateOptionalStringArray(item, "itemGates", error)
+			|| !ValidateOptionalStringArray(item, "gates", error) || !ValidateOptionalStringArray(item, "presentationGates", error)
+			|| !ValidateOptionalStringArray(item, "executors", error) || !ValidateTargets(item, error))
+		{
+			return false;
+		}
+
+		const auto actionTypeField = item.find("actionType");
+		if (actionTypeField != item.end() && !actionTypeField->is_string())
+		{
+			error = L"field 'actionType' must be a string";
+			return false;
+		}
+
+		const std::wstring actionType =
+			actionTypeField == item.end() ? L"messageBox" : Utf8ToWide(actionTypeField->get_ref<const std::string&>());
+		if (actionType != L"messageBox" && actionType != L"launch")
+		{
+			error = L"field 'actionType' must be 'messageBox' or 'launch'";
+			return false;
+		}
+
+		if (actionType == L"launch")
+		{
+			const auto command = item.find("actionCommand");
+			if (command == item.end() || !command->is_string() || command->get_ref<const std::string&>().empty())
+			{
+				error = L"field 'actionCommand' is required for launch items";
+				return false;
+			}
+		}
+
+		return true;
+	}
+
+	bool ValidateMenuDocument(const Json& root, std::wstring& error)
+	{
+		if (!root.is_object())
+		{
+			error = L"menu.json root must be an object";
+			return false;
+		}
+
+		const auto schemaVersion = root.find("schemaVersion");
+		if (schemaVersion != root.end())
+		{
+			if (!schemaVersion->is_number_unsigned() || schemaVersion->get<std::uint64_t>() != 1)
+			{
+				error = L"unsupported menu.json schemaVersion";
+				return false;
+			}
+		}
+
+		for (const char* key : {"extensionGates", "itemGates", "presentationGates", "executors", "gates"})
+		{
+			if (!ValidateOptionalStringArray(root, key, error))
+			{
+				return false;
+			}
+		}
+
+		const auto items = root.find("menuItems");
+		if (items == root.end() || !items->is_array() || items->empty())
+		{
+			error = L"field 'menuItems' must be a non-empty array";
+			return false;
+		}
+
+		std::set<std::string> ids;
+		for (size_t index = 0; index < items->size(); ++index)
+		{
+			if (!ValidateMenuItem((*items)[index], index, ids, error))
+			{
+				return false;
+			}
+		}
+
+		return true;
+	}
 } // namespace
 
 std::vector<MenuItemDef> GetBuiltinMenuItems()
@@ -267,6 +505,9 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 	static MenuConfigDocument cachedDocument;
 	static bool hasCachedDocument = false;
 	static bool cachedLoadSucceeded = false;
+	static std::mutex cacheMutex;
+
+	std::lock_guard<std::mutex> cacheLock(cacheMutex);
 
 	if (hasCachedDocument && cachedConfigPath == configPath)
 	{
@@ -295,6 +536,19 @@ bool LoadMenuConfigDocument(const std::wstring& configPath, MenuConfigDocument& 
 		document.items = GetBuiltinMenuItems();
 		ApplyDefaultMenuGateChains(document.globalChains);
 		ShellLog(L"Failed to parse config, using built-in menu: %s", configPath.c_str());
+		cachedDocument = document;
+		cachedConfigPath = configPath;
+		hasCachedDocument = true;
+		cachedLoadSucceeded = false;
+		return false;
+	}
+
+	std::wstring validationError;
+	if (!ValidateMenuDocument(root, validationError))
+	{
+		document.items = GetBuiltinMenuItems();
+		ApplyDefaultMenuGateChains(document.globalChains);
+		ShellLog(L"Invalid menu config (%s): %s", configPath.c_str(), validationError.c_str());
 		cachedDocument = document;
 		cachedConfigPath = configPath;
 		hasCachedDocument = true;

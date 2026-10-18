@@ -1,4 +1,4 @@
-﻿// Verification harness for the nlohmann/json-based MenuConfig parser.
+// Verification harness for the nlohmann/json-based MenuConfig parser.
 // Includes the REAL MenuConfig.cpp and drives it through its public API.
 #include <cstdio>
 #include <cstring>
@@ -121,16 +121,17 @@ int main()
 		CHECK(doc.items[0].filter.extensions[1] == L".txt");
 	}
 
-	printf("== C6: minSelection validation (T6) ==\n");
+	printf("== C6: invalid minSelection types reject the whole document ==\n");
 	{
 		const auto p1 = WriteTempJson(L"c6a.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","minSelection":"abc"}]})");
 		const auto p2 = WriteTempJson(L"c6b.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","minSelection":-5}]})");
 		const auto p3 = WriteTempJson(L"c6c.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","minSelection":5000000000}]})");
 		const auto p4 = WriteTempJson(L"c6d.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","minSelection":3}]})");
 		MenuConfigDocument doc;
-		CHECK(LoadMenuConfigDocument(p1, doc) && doc.items[0].filter.minSelection == 1);
-		CHECK(LoadMenuConfigDocument(p2, doc) && doc.items[0].filter.minSelection == 1);
-		CHECK(LoadMenuConfigDocument(p3, doc) && doc.items[0].filter.minSelection == 1);
+		CHECK(!LoadMenuConfigDocument(p1, doc));
+		CHECK(doc.items.size() == 1 && doc.items[0].id == L"display-file-name");
+		CHECK(!LoadMenuConfigDocument(p2, doc));
+		CHECK(!LoadMenuConfigDocument(p3, doc));
 		CHECK(LoadMenuConfigDocument(p4, doc) && doc.items[0].filter.minSelection == 3);
 	}
 
@@ -186,16 +187,14 @@ int main()
 		CHECK(doc.items[0].targets.size() == 1);
 	}
 
-	printf("== C12: item with unknown target name is skipped ==\n");
+	printf("== C12: unknown target rejects the whole document ==\n");
 	{
 		const auto path = WriteTempJson(
 			L"c12.json",
 			R"({"menuItems":[{"id":"a","label":"A","verb":"va","targets":["bogus"]},{"id":"b","label":"B","verb":"vb"}]})");
 		MenuConfigDocument doc;
-		const bool ok = LoadMenuConfigDocument(path, doc);
-		CHECK(ok);
-		CHECK(doc.items.size() == 1);
-		CHECK(doc.items[0].id == L"b");
+		CHECK(!LoadMenuConfigDocument(path, doc));
+		CHECK(doc.items.size() == 1 && doc.items[0].id == L"display-file-name");
 	}
 
 	printf("== C13: config executors replace defaults (H2) ==\n");
@@ -223,6 +222,55 @@ int main()
 		CHECK(ok);
 		CHECK(doc.globalChains.itemGates.size() == 1);
 		CHECK(doc.globalChains.itemGates[0] == L"legacyGate");
+	}
+
+	printf("== C15: wrong targets type rejects the document ==\n");
+	{
+		const auto path = WriteTempJson(
+			L"c15.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","targets":"file"}]})");
+		MenuConfigDocument doc;
+		CHECK(!LoadMenuConfigDocument(path, doc));
+		CHECK(doc.items.size() == 1 && doc.items[0].id == L"display-file-name");
+	}
+
+	printf("== C16: unknown actionType rejects the document ==\n");
+	{
+		const auto path = WriteTempJson(
+			L"c16.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","actionType":"launch2"}]})");
+		MenuConfigDocument doc;
+		CHECK(!LoadMenuConfigDocument(path, doc));
+	}
+
+	printf("== C17: launch without actionCommand rejects the document ==\n");
+	{
+		const auto path = WriteTempJson(
+			L"c17.json", R"({"menuItems":[{"id":"a","label":"A","verb":"va","actionType":"launch"}]})");
+		MenuConfigDocument doc;
+		CHECK(!LoadMenuConfigDocument(path, doc));
+
+		const auto validPath = WriteTempJson(
+			L"c17b.json",
+			R"({"menuItems":[{"id":"a","label":"A","verb":"va","actionType":"launch","actionCommand":"notepad.exe %1"}]})");
+		CHECK(LoadMenuConfigDocument(validPath, doc));
+		CHECK(doc.items[0].action.type == MenuActionType::Launch);
+	}
+
+	printf("== C18: duplicate ids reject the document ==\n");
+	{
+		const auto path = WriteTempJson(
+			L"c18.json",
+			R"({"menuItems":[{"id":"a","label":"A","verb":"va"},{"id":"a","label":"B","verb":"vb"}]})");
+		MenuConfigDocument doc;
+		CHECK(!LoadMenuConfigDocument(path, doc));
+	}
+
+	printf("== C19: unsupported menu schemaVersion rejects the document ==\n");
+	{
+		const auto path = WriteTempJson(
+			L"c19.json",
+			R"({"schemaVersion":2,"menuItems":[{"id":"a","label":"A","verb":"va"}]})");
+		MenuConfigDocument doc;
+		CHECK(!LoadMenuConfigDocument(path, doc));
 	}
 
 	printf("\n%d/%d checks passed\n", g_total - g_failed, g_total);

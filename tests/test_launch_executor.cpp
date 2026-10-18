@@ -1,4 +1,4 @@
-﻿// Hijack regression test for LaunchExecutor.
+// Hijack regression test for LaunchExecutor.
 // Compiles the REAL LaunchExecutor.cpp / ActionPlaceholders.cpp / PathHelpers.cpp.
 // A fake marker.exe is planted in the current directory while a legitimate copy
 // sits in a directory on PATH; the launch must resolve to the PATH copy.
@@ -50,6 +50,24 @@ static std::wstring ReadFirstLine(const std::wstring& path)
 		line.pop_back();
 	}
 	return line;
+}
+
+static std::wstring ReadAllText(const std::wstring& path)
+{
+	FILE* f = nullptr;
+	if (_wfopen_s(&f, path.c_str(), L"r") != 0 || f == nullptr)
+	{
+		return L"";
+	}
+
+	std::wstring content;
+	wchar_t buffer[1024] = {};
+	while (fgetws(buffer, 1024, f) != nullptr)
+	{
+		content += buffer;
+	}
+	fclose(f);
+	return content;
 }
 
 static bool WaitForFile(const std::wstring& path, int iterations)
@@ -155,7 +173,31 @@ int main()
 		CHECK(resolved == g_safeDir + L"\\marker.exe");
 	}
 
-	printf("== H4-6: unresolvable name fails instead of falling back to CWD ==\n");
+	printf("== H4-6: unquoted spaced executable preserves argv ==\n");
+	{
+		const std::wstring spacedExe = spacedDir + L"\\named marker.exe";
+		CHECK(CopyFileW(markerSource.c_str(), spacedExe.c_str(), FALSE) != 0);
+
+		const std::wstring outFile = g_baseDir + L"\\out_spaced_args.txt";
+		DeleteFileW(outFile.c_str());
+
+		MenuContext context = SingleSelectionContext(outFile);
+		MenuAction action;
+		action.type = MenuActionType::Launch;
+		action.command = spacedExe + L" " + outFile + L" alpha beta";
+
+		LaunchExecutor executor;
+		CHECK(executor.Execute(context, action, nullptr));
+		CHECK(WaitForFile(outFile, 100));
+		const std::wstring content = ReadAllText(outFile);
+		printf("   output:\n%ls", content.c_str());
+		CHECK(content.find(L"argc=4") != std::wstring::npos);
+		CHECK(content.find(L"argv[1]=" + outFile) != std::wstring::npos);
+		CHECK(content.find(L"argv[2]=alpha") != std::wstring::npos);
+		CHECK(content.find(L"argv[3]=beta") != std::wstring::npos);
+	}
+
+	printf("== H4-7: unresolvable name fails instead of falling back to CWD ==\n");
 	{
 		MenuContext context;
 		MenuAction action;

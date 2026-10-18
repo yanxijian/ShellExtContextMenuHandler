@@ -1,4 +1,4 @@
-﻿// Verification harness for single-pass placeholder expansion.
+// Verification harness for single-pass placeholder expansion.
 // Compiles the REAL ActionPlaceholders.cpp and PathHelpers.cpp.
 #include "../src/actions/ActionPlaceholders.cpp"
 #include "../src/menu/PathHelpers.cpp"
@@ -96,6 +96,15 @@ int main()
 		CHECK_EQ(ExpandActionPlaceholders(L"unknown %X token", ctx), std::wstring(L"unknown %X token"));
 		CHECK_EQ(ExpandActionPlaceholders(L"%%1", ctx), std::wstring(L"%C:\\f.txt"));
 		CHECK_EQ(ExpandActionPlaceholders(L"%n", ctx), std::wstring(L"%n")); // tokens are case sensitive, as before
+	}
+
+	printf("== P10: %%D supports paths longer than MAX_PATH ==\n");
+	{
+		const std::wstring longPath = L"C:\\" + std::wstring(300, L'a') + L"\\file.txt";
+		const std::wstring expectedParent = L"C:\\" + std::wstring(300, L'a');
+		const auto ctx = SingleFileContext(longPath.c_str());
+		CHECK_EQ(ExpandActionPlaceholders(L"%1", ctx), longPath);
+		CHECK_EQ(ExpandActionPlaceholders(L"%D", ctx), expectedParent);
 	}
 
 	printf("\n%d/%d checks passed\n", g_total - g_failed, g_total);

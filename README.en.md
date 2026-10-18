@@ -15,13 +15,15 @@ Before using this project in an important project, commercial software, or produ
 - Registers five Shell target types by default: file, directory, directory background, drive, and file-system object.
 - Configures menu items, target filters, selection filters, gate/executor chains, and actions in `config/menu.json`.
 - Configures COM/Shell registration targets in `config/registration.json`.
+- Validates the whole configuration strictly: wrong field types, unknown gates/executors, unknown `actionType`, and duplicate ids fall back to the built-in menu instead of silently widening filters.
+- Validates `registration.json` before touching the registry; an invalid file leaves an existing installation unchanged. Successful register/unregister calls notify the Shell.
 - Supports `messageBox` and `launch` actions plus custom executors.
 - Supports SVG/BMP icons; SVG files are loaded and rasterized by the existing NanoSVG provider with DPI scaling.
 - Three gate stages: Extension, Item, and Presentation.
 - Built-in gates: `extensionPass`, `jsonFilter`, `presentationPass`, `demo:hideTemp`, `demo:readOnlyDisable`; built-in executors: `messageBox`, `launch`, `demo:actionLog`.
-- Build output includes double-clickable `register.bat` and `unregister.bat` scripts with UAC elevation.
+- Build output includes double-clickable `register.bat` and `unregister.bat` scripts with UAC elevation; the scripts select `System32` or `SysWOW64` `regsvr32` to match the DLL bitness.
 - Debug logging through `OutputDebugString` with the `[ShellExt]` prefix.
-- Ships CTest unit tests covering config parsing, placeholder expansion, context building, and launch command resolution; CI runs them automatically.
+- Ships CTest unit tests covering config parsing, placeholder expansion, context building, launch command resolution, registration config parsing, and COM exception boundaries; CI runs them automatically.
 
 ## Quick Start
 
@@ -30,7 +32,7 @@ Before using this project in an important project, commercial software, or produ
 - Windows x64
 - Visual Studio 2026 C++ toolchain
 - CMake 3.20 or later
-- Python 3 for configuration validation
+- Python 3.9 or later for configuration validation
 
 Windows 7 SP1 and later are the design targets. Validate the final DLL on the Windows version and Explorer bitness you intend to support.
 
@@ -44,6 +46,8 @@ python tools/validate_menu_json.py
 ```
 
 Unit tests are off by default (`SHELLEXT_BUILD_TESTS=ON` enables them). They live in `tests/` and compile the real sources instead of copies.
+
+The DLL links the MSVC CRT statically (`/MT`), so the target machine does not need a separate VC++ runtime; the DLL is slightly larger.
 
 `tools/generate-vs.ps1` can also be used to generate the Visual Studio project.
 
@@ -69,7 +73,9 @@ Alternatively, use an elevated PowerShell:
 .\tools\register.ps1 -Action unregister
 ```
 
-`register.ps1` copies `menu.json`, `registration.json`, and `config/icons/` beside the DLL. After changing the DLL or configuration, unregister and register again; restart Explorer if its cache has not refreshed.
+`register.ps1` validates the JSON syntax and registration targets (and runs the full validator when Python is available), copies `registration.json`, calls `regsvr32`, and copies `menu.json` and `config/icons/` only after a successful registration; a failed registration restores the previous `registration.json`. After changing the DLL or configuration, unregister and register again; successful operations send `SHChangeNotify`, so an Explorer restart is normally unnecessary. An invalid `registration.json` fails registration without modifying the existing registry.
+
+`register.bat`/`unregister.bat` and `register.ps1` inspect the DLL's PE machine type and select the matching `regsvr32` (`System32` for x64, `SysWOW64` for x86).
 
 ### Manual smoke test
 
@@ -114,6 +120,7 @@ If `registration.json` is missing, registration defaults to `file`. If the file 
 
 ```json
 {
+  "schemaVersion": 1,
   "extensionGates": ["extensionPass"],
   "itemGates": ["jsonFilter"],
   "presentationGates": ["presentationPass"],
@@ -124,13 +131,14 @@ If `registration.json` is missing, registration defaults to `file`. If the file 
 
 | Field | Description |
 |-------|-------------|
+| `schemaVersion` | Optional; currently only `1` is accepted, so future format changes can reject incompatible files |
 | `extensionGates` | Gate 1 chain; decides whether the extension participates |
 | `itemGates` | Gate 2 chain; decides whether an item becomes a candidate; `gates` is an alias |
 | `presentationGates` | Gate 3 chain; returns hidden, disabled, or enabled |
 | `executors` | Default action executor chain |
 | `menuItems` | Menu item definitions |
 
-`menu.json` must be UTF-8 (BOM tolerated) and is parsed with `third_party/nlohmann/json`. A field type mismatch is treated as a configuration error and falls back to the built-in menu.
+`menu.json` must be UTF-8 (BOM tolerated) and is parsed with `third_party/nlohmann/json`. Wrong field types, unknown gates/executors, unknown `actionType`, duplicate ids, and other document-level errors fall back to the built-in menu. Unknown chain names are not silently ignored.
 
 Chain override semantics: an explicitly configured per-item chain **replaces** the root default entirely instead of appending to it. Root defaults apply only when the chain is missing or empty.
 
@@ -181,7 +189,9 @@ The `launch` action explicitly resolves the executable in `actionCommand` before
 
 ### Long paths
 
-Selected object paths are not limited by `MAX_PATH` and are preserved in full in the context and placeholders.
+Selected object paths are not limited by `MAX_PATH`. `%1`, `%*`, `%N`, and `%D` are all processed as dynamic `std::wstring` values. Directory-background paths try `SHGetPathFromIDListEx` first and fall back to `SHGetPathFromIDListW`; file attribute reads retry with a `\\?\` extended path when the plain path fails.
+
+Actual paths longer than `MAX_PATH` still require the system long-path policy and a long-path-aware Explorer; otherwise the Shell will not hand such paths to the extension.
 
 ## Extending the project
 
@@ -231,7 +241,7 @@ Registration entry points are in `src/extension/dllmain.cpp`; registry helpers a
 
 ```text
 config/                 Runtime menu, registration targets, and icons
-src/extension/          COM DLL entry point and Shell extension object
+src/extension/          COM DLL entry point, ClassFactory, FileContextMenuExt, and ComGuard
 src/context/            Selection context and Shell target recognition
 src/gates/              Gate interfaces, registry, and built-in gates
 src/actions/            Executor interfaces, registry, and actions
@@ -240,19 +250,20 @@ src/menu/               Configuration, filtering, insertion, and invocation
 src/registry/           COM/Shell registry helpers
 tools/                  Build helpers, registration scripts, and validation
 tests/                  CTest unit tests
-third_party/            Third-party libraries (nlohmann/json)
+third_party/            Third-party libraries (nlohmann/json, NanoSVG)
 docs/                   Architecture and validation documentation
 ```
 
 ## Notes
 
-- A 64-bit Explorer requires a 64-bit DLL; use the matching bitness for 32-bit Explorer.
+- A 64-bit Explorer requires a 64-bit DLL; use the matching bitness for 32-bit Explorer. The registration scripts select `System32`/`SysWOW64` `regsvr32` automatically.
 - COM registration requires administrator privileges.
-- Windows 7 support is a design target; complete the Win7 SP1 x64 regression before release.
+- Windows 7 support is a design target; complete the Win7 SP1 x64 regression before release. The current VS 2026 toolchain and static CRT need separate validation on Win7; if unsupported, rebuild with a supported older toolchain.
+- The DLL links the MSVC CRT statically; re-evaluate the runtime requirements if you add new dependencies.
 - Do not edit generated files under `build/`, `build-*`, or third-party directories.
 
 ## COM identity and license
 
 When shipping a fork, change `CLSID_FileContextMenuExt` in `src/extension/dllmain.cpp` and the friendly names in `include/shell_ext/common.h`.
 
-This project is derived from Microsoft's sample. Source files retain the original Microsoft headers and use the [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL).
+This project is derived from Microsoft's sample. Source files retain the original Microsoft headers and use the [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL). The full license text is in `LICENSE`; third-party notices for nlohmann/json and NanoSVG are in `THIRD_PARTY_NOTICES.md`.
