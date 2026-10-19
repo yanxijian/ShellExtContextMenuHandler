@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.7.0"
+__version__ = "0.7.1"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -47,9 +47,13 @@ set -e
 root=$(git rev-parse --show-toplevel)
 cd "$root"
 
+# The checker lives in scripts/ for a project and at the root for RepoRules itself.
+tool=scripts/repo_rules.py
+[ -f "$tool" ] || tool=repo_rules.py
+
 for candidate in python3 python py; do
 \tif command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
-\t\texec "$candidate" scripts/repo_rules.py check --config repo-rules.json --staged
+\t\texec "$candidate" "$tool" check --config repo-rules.json --staged
 \tfi
 done
 
@@ -72,9 +76,13 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 [ -f repo-rules.json ] || exit 0
 
+# The checker lives in scripts/ for a project and at the root for RepoRules itself.
+tool=scripts/repo_rules.py
+[ -f "$tool" ] || tool=repo_rules.py
+
 for candidate in python3 python py; do
 \tif command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
-\t\texec "$candidate" scripts/repo_rules.py check-msg "$1" --config repo-rules.json
+\t\texec "$candidate" "$tool" check-msg "$1" --config repo-rules.json
 \tfi
 done
 

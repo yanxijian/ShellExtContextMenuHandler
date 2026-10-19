@@ -13,9 +13,13 @@ root=$(git rev-parse --show-toplevel)
 cd "$root"
 [ -f repo-rules.json ] || exit 0
 
+# The checker lives in scripts/ for a project and at the root for RepoRules itself.
+tool=scripts/repo_rules.py
+[ -f "$tool" ] || tool=repo_rules.py
+
 for candidate in python3 python py; do
 	if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
-		exec "$candidate" scripts/repo_rules.py check-msg "$1" --config repo-rules.json
+		exec "$candidate" "$tool" check-msg "$1" --config repo-rules.json
 	fi
 done
 
