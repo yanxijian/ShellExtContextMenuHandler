@@ -8,6 +8,7 @@ number.
 
 ### Changed
 
+- README is maintained in four languages: `README.md` (English default), `README.zh-CN.md`, `README.ja.md` and `README.ko.md`. The language switch line is validated by RepoRules `markdown.languages`, which replaced the old `bilingual_pairs` check.
 - Repository rules now come from [RepoRules](https://github.com/yanxijian/RepoRules)
   instead of the repo-local scripts/check_repo_rules.py: the checker is vendored
   as scripts/repo_rules.py, the policy lives in epo-rules.json, and

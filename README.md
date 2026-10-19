@@ -1,44 +1,42 @@
 # ShellExtContextMenuHandler
 
-[![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
+**English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-**简体中文** | [English](README.en.md)
+A configurable Windows Explorer context-menu extension derived from Microsoft's C++ Shell extension sample. Menu items, Shell registration targets, filters, gates, executors, and icons are configurable; complex behavior stays in C++.
 
-基于微软官方 C++ Shell 扩展示例改造的 Windows Explorer 右键菜单扩展。菜单项、Shell 注册目标、过滤器、Gate、Executor 和图标都可以配置，复杂逻辑通过 C++ 扩展。
+## Disclaimer
 
-## 免责声明
+This project was developed primarily with the assistance of AI Agents. Parts of the code, design, and documentation have not undergone sufficient, rigorous, or comprehensive testing. The project is provided for learning, research, and technical reference only; correctness, stability, and security are not guaranteed for all systems, environments, or use cases.
 
-本项目主要由 AI Agent 辅助开发，部分代码、设计和文档内容尚未经过充分、严谨和全面的测试验证。项目仅供学习、研究和技术参考，不保证在所有系统、环境和使用场景下的正确性、稳定性或安全性。
+Before using this project in an important project, commercial software, or production environment, perform appropriate code review, customization, security assessment, and compatibility testing. The project author assumes no responsibility for data loss, system failures, business interruptions, or any other direct or indirect losses resulting from the use of this project.
 
-在将本项目用于重要项目、商业软件或生产环境之前，请根据实际需求进行充分的代码审查、功能定制、安全评估和兼容性测试。因直接或间接使用本项目造成的任何数据丢失、系统故障、业务中断或其他损失，项目作者不承担任何责任。
+## Features
 
-## 功能概览
+- Registers five Shell target types by default: file, directory, directory background, drive, and file-system object.
+- Configures menu items, target filters, selection filters, gate/executor chains, and actions in `config/menu.json`.
+- Configures COM/Shell registration targets in `config/registration.json`.
+- Validates the whole configuration strictly: wrong field types, unknown gates/executors, unknown `actionType`, and duplicate ids fall back to the built-in menu instead of silently widening filters.
+- Validates `registration.json` before touching the registry; an invalid file leaves an existing installation unchanged. Successful register/unregister calls notify the Shell.
+- Supports `messageBox` and `launch` actions plus custom executors.
+- Supports SVG/BMP icons; SVG files are loaded and rasterized by the existing NanoSVG provider with DPI scaling.
+- Three gate stages: Extension, Item, and Presentation.
+- Built-in gates: `extensionPass`, `jsonFilter`, `presentationPass`, `demo:hideTemp`, `demo:readOnlyDisable`; built-in executors: `messageBox`, `launch`, `demo:actionLog`.
+- Build output includes double-clickable `register.bat` and `unregister.bat` scripts with UAC elevation; the scripts select `System32` or `SysWOW64` `regsvr32` to match the DLL bitness.
+- Debug logging through `OutputDebugString` with the `[ShellExt]` prefix.
+- Ships CTest unit tests covering config parsing, placeholder expansion, context building, launch command resolution, registration config parsing, and COM exception boundaries; CI runs them automatically.
 
-- 默认注册五类 Shell 目标：文件、目录、目录背景、驱动器和文件系统对象。
-- 使用 `config/menu.json` 配置菜单项、目标过滤、选择过滤、Gate/Executor 链和动作参数。
-- 使用 `config/registration.json` 控制 DLL 注册到哪些 Shell 注册位置。
-- 严格校验配置：字段类型错误、未知 Gate/Executor、未知 `actionType`、重复 `id` 等会让整份配置失效并回退内置菜单，不会静默放宽过滤条件。
-- 注册前先校验 `registration.json`；无效配置不会修改已有注册表。注册/卸载成功后会通知 Shell 刷新关联。
-- 支持 `messageBox` 和 `launch` 动作，以及自定义 Executor。
-- 支持 SVG/BMP 图标，SVG 由现有 NanoSVG 提供器加载并按 DPI 栅格化。
-- 三层 Gate：Extension、Item、Presentation，可分别控制扩展参与、菜单候选和最终显示状态。
-- 内置 Gate：`extensionPass`、`jsonFilter`、`presentationPass`、`demo:hideTemp`、`demo:readOnlyDisable`；内置 Executor：`messageBox`、`launch`、`demo:actionLog`。
-- 构建输出包含可双击的 `register.bat` 和 `unregister.bat`，会请求管理员权限调用 `regsvr32`；脚本会根据 DLL 位数选择 `System32` 或 `SysWOW64`。
-- 通过 `OutputDebugString` 输出 `[ShellExt]` 调试日志。
-- 内置 CTest 单元测试覆盖配置解析、占位符展开、上下文构建、启动命令解析、注册配置解析和 COM 异常边界，CI 自动运行。
+## Quick Start
 
-## 快速开始
-
-### 环境
+### Requirements
 
 - Windows x64
-- Visual Studio 2026 C++ 工具链
-- CMake 3.20 或更高版本
-- Python 3.9 或更高版本，用于配置校验
+- Visual Studio 2026 C++ toolchain
+- CMake 3.20 or later
+- Python 3.9 or later for configuration validation
 
-项目的设计目标是 Windows 7 SP1 及之后版本，但发布前必须在目标 Windows 版本和对应位数的 Explorer 中验证。
+Windows 7 SP1 and later are the design targets. Validate the final DLL on the Windows version and Explorer bitness you intend to support.
 
-### 构建
+### Build
 
 ```powershell
 cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
@@ -47,13 +45,13 @@ ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
 ```
 
-单元测试默认关闭（`SHELLEXT_BUILD_TESTS=ON` 启用），位于 `tests/`，直接编译真实源码而非副本。
+Unit tests are off by default (`SHELLEXT_BUILD_TESTS=ON` enables them). They live in `tests/` and compile the real sources instead of copies.
 
-DLL 默认静态链接 MSVC CRT（`/MT`），目标机不需要额外安装 VC++ 运行库；代价是 DLL 体积略大。
+The DLL links the MSVC CRT statically (`/MT`), so the target machine does not need a separate VC++ runtime; the DLL is slightly larger.
 
-也可以运行 `tools/generate-vs.ps1` 生成 Visual Studio 工程。
+`tools/generate-vs.ps1` can also be used to generate the Visual Studio project.
 
-构建输出位于 `build/bin/Release/`，包括：
+The output is in `build/bin/Release/`:
 
 ```text
 CppShellExtContextMenuHandler.dll
@@ -64,53 +62,53 @@ unregister.bat
 icons/
 ```
 
-### 注册、测试和卸载
+### Register, Test, and Unregister
 
-推荐直接双击 DLL 输出目录中的 `register.bat`。它会使用当前目录的 DLL，并通过 UAC 提权注册。卸载时双击 `unregister.bat`。
+Double-click `register.bat` in the DLL output directory. It uses the DLL beside the batch file and requests elevation before calling `regsvr32`. Double-click `unregister.bat` to remove the extension.
 
-也可以在管理员 PowerShell 中执行：
+Alternatively, use an elevated PowerShell:
 
 ```powershell
 .\tools\register.ps1 -Action register
 .\tools\register.ps1 -Action unregister
 ```
 
-使用 `register.ps1` 时，脚本会先校验两个 JSON 的格式和 registration 目标（本机有 Python 时还会运行完整校验器），复制 `registration.json` 后调用 `regsvr32`，注册成功后再复制 `menu.json` 和 `config/icons/`；注册失败会恢复原来的 `registration.json`。更新 DLL 或配置后，先卸载再重新注册；注册/卸载成功会发送 `SHChangeNotify`，通常无需重启 Explorer。`registration.json` 无效时注册直接失败，不会修改已有注册表。
+`register.ps1` validates the JSON syntax and registration targets (and runs the full validator when Python is available), copies `registration.json`, calls `regsvr32`, and copies `menu.json` and `config/icons/` only after a successful registration; a failed registration restores the previous `registration.json`. After changing the DLL or configuration, unregister and register again; successful operations send `SHChangeNotify`, so an Explorer restart is normally unnecessary. An invalid `registration.json` fails registration without modifying the existing registry.
 
-`register.bat`/`unregister.bat` 和 `register.ps1` 会根据 DLL 的 PE 位数选择匹配的 `regsvr32`（64 位用 `System32`，32 位用 `SysWOW64`）。
+`register.bat`/`unregister.bat` and `register.ps1` inspect the DLL's PE machine type and select the matching `regsvr32` (`System32` for x64, `SysWOW64` for x86).
 
-### 手动验证
+### Manual smoke test
 
-1. 先运行 `unregister.bat`，再运行 `register.bat`。
-2. 右键一个普通文件，确认出现 `Demo -F`。
-3. 右键文件夹，确认出现 `Demo -D`。
-4. 在文件夹空白区域右键，确认出现 `Demo -DB`。
-5. 右键驱动器根目录，确认出现 `Demo -DR`。
-6. 同时选中文件和目录，确认出现 `Demo -FS`。
-7. 执行菜单项，MessageBox 应显示目标名称。
+1. Run `unregister.bat`, then run `register.bat`.
+2. Right-click a regular file and verify `Demo -F`.
+3. Right-click a directory and verify `Demo -D`.
+4. Right-click empty space in a directory and verify `Demo -DB`.
+5. Right-click a drive root and verify `Demo -DR`.
+6. Select both a file and a directory and verify `Demo -FS`.
+7. Invoke an item and verify that the MessageBox shows the target name.
 
-## 工程规范与检查
+## Repository rules and checks
 
-可机械检查的规范由 [RepoRules](https://github.com/yanxijian/RepoRules) 提供（检查器内置为 `scripts/repo_rules.py`、配置在 `repo-rules.json`），CI 在 `.github/workflows/hygiene.yml` 中执行：
+Mechanical rules come from [RepoRules](https://github.com/yanxijian/RepoRules) (checker vendored as `scripts/repo_rules.py`, configured by `repo-rules.json`) and run in CI via `.github/workflows/hygiene.yml`:
 
-- C/C++ 使用 UTF-8 BOM + CRLF；Markdown 使用 CRLF；CMake、脚本、JSON、YAML 使用 LF（见 `.gitattributes` / `.editorconfig`）。
-- C/C++ 行宽不超过 140 列；头文件首行 `#pragma once`；不使用 `#pragma comment(lib)`，Windows 库统一通过 CMake 链接。
-- `CMakeLists.txt`、`src/resources/Version.rc` 和 `include/shell_ext/common.h` 的版本号保持一致；[CHANGELOG.md](CHANGELOG.md) 保留 `[Unreleased]`。
-- Markdown 相对链接、README/架构文档的中英文互链必须可解析。
+- C/C++ is UTF-8 BOM + CRLF; Markdown is CRLF; CMake, scripts, JSON and YAML are LF (see `.gitattributes` / `.editorconfig`).
+- C/C++ lines stay within 140 columns; headers start with `#pragma once`; no `#pragma comment(lib)` - link Windows libraries through CMake.
+- `CMakeLists.txt`, `src/resources/Version.rc` and `include/shell_ext/common.h` must agree on the version; [CHANGELOG.md](CHANGELOG.md) keeps an `[Unreleased]` section.
+- Relative Markdown links and the Chinese/English document pairs must resolve.
 
 ```powershell
-python scripts/repo_rules.py check --config repo-rules.json   # 检查
-python scripts/repo_rules.py fix   --config repo-rules.json   # 修复 BOM/行尾
+python scripts/repo_rules.py check --config repo-rules.json   # check
+python scripts/repo_rules.py fix   --config repo-rules.json   # repair BOM/line endings
 python -m unittest discover -s scripts/tests -v
 ```
 
-可选安装提交前钩子：`git config core.hooksPath .githooks`。完整规则和审查重点见 [AGENTS.md](AGENTS.md)，贡献流程见 [CONTRIBUTING.md](CONTRIBUTING.md)，安全问题见 [SECURITY.md](SECURITY.md)。
+Optionally install the pre-commit hook with `git config core.hooksPath .githooks`. See [AGENTS.md](AGENTS.md) for the rules and review priorities, [CONTRIBUTING.en.md](CONTRIBUTING.en.md) for the workflow, and [SECURITY.en.md](SECURITY.en.md) for private reporting.
 
-## 配置参考
+## Configuration
 
-### Shell 注册目标
+### Shell registration targets
 
-`config/registration.json`：
+`config/registration.json`:
 
 ```json
 {
@@ -125,17 +123,17 @@ python -m unittest discover -s scripts/tests -v
 }
 ```
 
-| 目标 | 注册表位置 | 运行时上下文 |
-|------|------------|--------------|
-| `file` | `*` | 仅文件选择 |
-| `directory` | `Directory` | 仅目录选择 |
-| `directoryBackground` | `Directory\\Background` | 无选中、当前目录背景 |
-| `drive` | `Drive` | 驱动器根目录 |
-| `fileSystemObject` | `AllFilesystemObjects` | 文件和目录混合选择 |
+| Target | Registry location | Runtime context |
+|--------|------------------|-----------------|
+| `file` | `*` | File-only selection |
+| `directory` | `Directory` | Directory-only selection |
+| `directoryBackground` | `Directory\\Background` | Empty selection in a directory |
+| `drive` | `Drive` | Drive root |
+| `fileSystemObject` | `AllFilesystemObjects` | Mixed file-and-directory selection |
 
-注册配置缺失时默认使用 `file`。配置文件存在但格式错误、版本不支持、目标未知或目标重复时，注册会失败，不会静默修改注册表。卸载会清理所有已知目标，因此可以清理旧版本留下的注册项。
+If `registration.json` is missing, registration defaults to `file`. If the file exists but has an invalid schema, unknown target, duplicate target, or invalid array, registration fails instead of silently changing the registry. Unregistration removes all known targets so old registrations can be cleaned up.
 
-### `menu.json` 根级字段
+### Root-level `menu.json` fields
 
 ```json
 {
@@ -148,142 +146,142 @@ python -m unittest discover -s scripts/tests -v
 }
 ```
 
-| 字段 | 说明 |
-|------|------|
-| `schemaVersion` | 可选；当前只接受 `1`，后续格式变更时用于拒绝不兼容配置 |
-| `extensionGates` | Gate 1 链；决定当前扩展是否参与 |
-| `itemGates` | Gate 2 链；决定菜单项是否进入候选集，`gates` 是兼容别名 |
-| `presentationGates` | Gate 3 链；决定隐藏、禁用或启用 |
-| `executors` | 默认动作执行器链 |
-| `menuItems` | 菜单项定义数组 |
+| Field | Description |
+|-------|-------------|
+| `schemaVersion` | Optional; currently only `1` is accepted, so future format changes can reject incompatible files |
+| `extensionGates` | Gate 1 chain; decides whether the extension participates |
+| `itemGates` | Gate 2 chain; decides whether an item becomes a candidate; `gates` is an alias |
+| `presentationGates` | Gate 3 chain; returns hidden, disabled, or enabled |
+| `executors` | Default action executor chain |
+| `menuItems` | Menu item definitions |
 
-`menu.json` 必须是 UTF-8 编码（可带 BOM），由 `third_party/nlohmann/json` 解析；字段类型不匹配、未知 Gate/Executor、未知 `actionType`、重复 `id` 等整份配置错误会回退到内置菜单。未知 Gate/Executor 名称不会被静默忽略。
+`menu.json` must be UTF-8 (BOM tolerated) and is parsed with `third_party/nlohmann/json`. Wrong field types, unknown gates/executors, unknown `actionType`, duplicate ids, and other document-level errors fall back to the built-in menu. Unknown chain names are not silently ignored.
 
-菜单项链字段的覆盖语义：显式配置的链**整体替换**根级默认链，而不是追加；根级默认链只在配置缺失或为空时使用。
+Chain override semantics: an explicitly configured per-item chain **replaces** the root default entirely instead of appending to it. Root defaults apply only when the chain is missing or empty.
 
-### 菜单项字段
+### Per-item fields
 
-| 字段 | 说明 |
-|------|------|
-| `id` | 唯一标识 |
-| `label` | 菜单文字，`&` 表示快捷键 |
-| `verb` | 字符串命令名；InvokeCommand 按它或 `canonicalName` 匹配 |
-| `helpText` | Explorer 状态栏帮助文字 |
-| `canonicalName` | 规范命令名；InvokeCommand 匹配时与 `verb` 等效接受 |
-| `icon` | 相对 DLL 目录的 SVG/BMP 路径 |
-| `targets` | 目标数组：`file`、`directory`、`directoryBackground`、`drive`、`fileSystemObject` |
-| `separatorAfter` | 此项后插入分隔线 |
-| `extensions` | 允许的扩展名数组，例如 `[".cpp", ".h"]` |
-| `excludeExtensions` | 排除的扩展名数组 |
-| `minSelection` / `maxSelection` | 选择数量；`maxSelection: 0` 表示不限 |
-| `filesOnly` / `foldersOnly` | 限制选择内容类型 |
-| `actionType` | `messageBox` 或 `launch` |
-| `actionTitle` / `actionTemplate` | MessageBox 标题和内容 |
-| `actionCommand` / `actionShowWindow` | 启动命令和窗口显示选项 |
-| `extensionGates` / `itemGates` / `presentationGates` / `executors` | 对根级链的逐项覆盖；显式配置的链替换根级默认 |
+| Field | Description |
+|-------|-------------|
+| `id` | Unique identifier |
+| `label` | Menu text; `&` marks an accelerator |
+| `verb` | String command name; InvokeCommand matches on it or `canonicalName` |
+| `helpText` | Explorer status-bar help text |
+| `canonicalName` | Canonical command name; accepted interchangeably with `verb` for matching |
+| `icon` | SVG/BMP path relative to the DLL directory |
+| `targets` | `file`, `directory`, `directoryBackground`, `drive`, or `fileSystemObject` |
+| `separatorAfter` | Insert a separator after the item |
+| `extensions` | Allowed extensions such as `[".cpp", ".h"]` |
+| `excludeExtensions` | Extensions to reject |
+| `minSelection` / `maxSelection` | Selection count; `maxSelection: 0` means unlimited |
+| `filesOnly` / `foldersOnly` | Restrict selected object types |
+| `actionType` | `messageBox` or `launch` |
+| `actionTitle` / `actionTemplate` | MessageBox title and content |
+| `actionCommand` / `actionShowWindow` | Launch command and window option |
+| `extensionGates` / `itemGates` / `presentationGates` / `executors` | Per-item overrides of root chains; explicit chains replace root defaults |
 
-`targets` 为空时保持兼容行为，由 `filesOnly`、`foldersOnly` 等过滤条件决定；新菜单项建议显式填写 `targets`。
+An empty `targets` array preserves compatibility with the generic selection filters. New items should set `targets` explicitly.
 
-### 占位符
+### Placeholders
 
-| 占位符 | 含义 |
-|--------|------|
-| `%1` | 第一个选中对象的完整路径；无选中时为当前目录 |
-| `%*` | 所有选中路径，按引用格式拼接 |
-| `%D` | 第一个选中对象的父目录；无选中时为当前目录 |
-| `%N` | 第一个选中对象或当前目录的名称，不含父路径 |
+| Token | Meaning |
+|-------|---------|
+| `%1` | Full path of the first selected object, or current directory |
+| `%*` | All selected paths, quoted and joined |
+| `%D` | Parent directory of the first selected object, or current directory |
+| `%N` | Name of the first selected object or current directory, without its parent path |
 
-配置无效或缺失时，运行时回退到 `include/shell_ext/common.h` 中的内置菜单项和默认 Gate 链。
+If `menu.json` is missing or invalid, the extension falls back to the built-in item in `include/shell_ext/common.h` and the default gate chain.
 
-占位符展开为单趟扫描：替换后的结果不会被重新解析，因此选中对象的名称中包含 `%1`、`%N` 等 token 也是安全的。
+Placeholder expansion is single-pass: the replacement text is not rescanned, so selected file names containing tokens such as `%1` or `%N` are safe.
 
-### launch 命令解析
+### Launch command resolution
 
-`launch` 动作在启动前显式解析 `actionCommand` 中的可执行文件：
+The `launch` action explicitly resolves the executable in `actionCommand` before starting it:
 
-- 带引号的路径原样使用。
-- 不带引号且含空格的路径按 CreateProcess 文档规则做前缀渐进匹配。
-- 裸命令名（如 `notepad.exe`）只在系统目录和 PATH 的绝对项中搜索，**不搜索当前目录**，避免当前目录同名程序被劫持。
-- 解析失败时记录日志并拒绝启动。
+- Quoted paths are used as-is.
+- Unquoted paths containing spaces follow the CreateProcess documented prefix-progressive search.
+- Bare command names (such as `notepad.exe`) are resolved from the system directories and absolute PATH entries only — **the current directory is never searched**, preventing same-name executables in it from being hijacked.
+- Unresolvable commands are logged and rejected instead of launched.
 
-### 超长路径
+### Long paths
 
-选中对象路径不受 `MAX_PATH` 限制，`%1`、`%*`、`%N`、`%D` 都基于动态 `std::wstring` 处理。目录背景路径会优先尝试 `SHGetPathFromIDListEx`，并回退到 `SHGetPathFromIDListW`。文件属性读取在普通路径失败时会尝试 `\\?\` 扩展路径。
+Selected object paths are not limited by `MAX_PATH`. `%1`, `%*`, `%N`, and `%D` are all processed as dynamic `std::wstring` values. Directory-background paths try `SHGetPathFromIDListEx` first and fall back to `SHGetPathFromIDListW`; file attribute reads retry with a `\\?\` extended path when the plain path fails.
 
-注意：真正超过 `MAX_PATH` 的路径仍需要系统启用 long path 策略，且 Explorer 进程本身支持长路径；否则 Shell 不会把该类路径传给扩展。详细验证见架构文档。
+Actual paths longer than `MAX_PATH` still require the system long-path policy and a long-path-aware Explorer; otherwise the Shell will not hand such paths to the extension.
 
-## 二次开发
+## Extending the project
 
-### 增加菜单项
+### Add a menu item
 
-1. 在 `config/menu.json` 的 `menuItems` 中增加对象。
-2. 为对象设置唯一 `id`、`verb`、`targets`、过滤条件和动作字段。
-3. 如果使用图标，把 SVG/BMP 放在 `config/icons/`，并填写相对路径。
-4. 运行 `python tools/validate_menu_json.py`。
+1. Add an object to `menuItems` in `config/menu.json`.
+2. Set a unique `id`, `verb`, `targets`, filters, and action fields.
+3. Put SVG/BMP assets in `config/icons/` and reference them with a relative path.
+4. Run `python tools/validate_menu_json.py`.
 
-### 增加 Gate
+### Add a gate
 
-1. 在 `src/gates/` 添加实现 `IExtensionGate`、`IMenuItemGate` 或 `IMenuItemPresentationGate` 的类。
-2. 在 `GateRegistry::RegisterBuiltInGates` 中注册名称。
-3. 在 `menu.json` 的对应 Gate 链中使用名称。
+1. Add an implementation of `IExtensionGate`, `IMenuItemGate`, or `IMenuItemPresentationGate` under `src/gates/`.
+2. Register its name in `GateRegistry::RegisterBuiltInGates`.
+3. Use the name in the appropriate chain in `menu.json`.
 
-Extension Gate 返回是否继续参与；Item Gate 返回是否进入候选集；Presentation Gate 返回 `Hidden`、`Disabled` 或 `Enabled`。
+Extension gates decide whether the extension participates, item gates decide candidate membership, and presentation gates return `Hidden`, `Disabled`, or `Enabled`.
 
-### 增加 Executor
+### Add an executor
 
-1. 在 `src/actions/` 添加实现 `IActionExecutor` 的类。
-2. 在 `ExecutorRegistry::RegisterBuiltInExecutors` 中注册名称。
-3. 在根级或菜单项的 `executors` 数组中配置名称。
-4. 在 `MenuAction` 中增加必要的配置字段，并在 `MenuConfig` 解析。
+1. Add an `IActionExecutor` implementation under `src/actions/`.
+2. Register it in `ExecutorRegistry::RegisterBuiltInExecutors`.
+3. Add its name to a root or per-item `executors` array.
+4. Extend `MenuAction` and `MenuConfig` if the executor needs new configuration fields.
 
-### 增加 Shell 目标
+### Add a Shell target
 
-1. 在 `ShellTargetType` 增加抽象枚举。
-2. 在 `ParseShellTargetType` 和 `GetShellTargetRegistryFileType` 增加配置名称与注册表位置映射。
-3. 在 `ContextBuilder` 增加实际上下文识别。
-4. 在菜单目标匹配和注册/卸载的已知目标列表中同步处理。
-5. 更新 `tools/validate_menu_json.py`、README 和架构文档。
+1. Add an enum value to `ShellTargetType`.
+2. Update `ParseShellTargetType` and `GetShellTargetRegistryFileType`.
+3. Add runtime recognition in `ContextBuilder`.
+4. Update target matching and the known registration/unregistration lists.
+5. Update `tools/validate_menu_json.py`, README, and architecture docs.
 
-### 修改 COM 注册
+### Change COM registration
 
-注册入口位于 `src/extension/dllmain.cpp`，注册表辅助函数位于 `src/registry/Reg.cpp`。注册流程必须保留部分失败回滚、重复执行幂等和旧目标清理逻辑。不要直接删除整个 `ContextMenuHandlers` 父键，只删除本项目 CLSID 对应的子键。
+Registration entry points are in `src/extension/dllmain.cpp`; registry helpers are in `src/registry/Reg.cpp`. Preserve rollback on partial registration, idempotent unregistration, and cleanup of legacy targets. Delete only this project's CLSID subkey, never an entire `ContextMenuHandlers` parent key.
 
-## 调试与排错
+## Debugging and troubleshooting
 
-- 使用 DebugView 查看 `[ShellExt]` 日志。
-- 确认 DLL 位数与 Explorer 位数一致。
-- 修改 DLL 或配置后重新注册，必要时重启 Explorer。
-- 如果菜单没有出现，先确认 `registration.json` 的目标、菜单项 `targets`、`filesOnly/foldersOnly` 和 Gate 链是否同时允许当前上下文。
-- 如果注册失败，检查管理员权限、`registration.json` 格式和 `regsvr32` 位数。
+- Use DebugView to inspect `[ShellExt]` logs.
+- Match the DLL bitness to Explorer.
+- Re-register after changing the DLL or configuration; restart Explorer when necessary.
+- If a menu is missing, check registration targets, item `targets`, `filesOnly/foldersOnly`, and gate chains together.
+- If registration fails, check elevation, `registration.json`, and the `regsvr32` bitness.
 
-## 项目结构
+## Project layout
 
 ```text
-config/                 运行时菜单、注册目标和图标
-src/extension/          COM DLL 入口、ClassFactory、FileContextMenuExt、ComGuard
-src/context/            选择上下文和 Shell 目标识别
-src/gates/              Gate 接口、注册表和内置 Gate
-src/actions/            Executor 接口、注册表和动作实现
-src/icons/              SVG/BMP 图标提供器
-src/menu/               配置、过滤、菜单插入和命令执行
-src/registry/           COM/Shell 注册表辅助
-tools/                  构建辅助、注册脚本和配置校验
-scripts/                仓库规则检查器及其测试
-tests/                  CTest 单元测试
-third_party/            第三方库（nlohmann/json、NanoSVG）
-docs/                   架构与验证文档
+config/                 Runtime menu, registration targets, and icons
+src/extension/          COM DLL entry point, ClassFactory, FileContextMenuExt, and ComGuard
+src/context/            Selection context and Shell target recognition
+src/gates/              Gate interfaces, registry, and built-in gates
+src/actions/            Executor interfaces, registry, and actions
+src/icons/              SVG/BMP icon providers
+src/menu/               Configuration, filtering, insertion, and invocation
+src/registry/           COM/Shell registry helpers
+tools/                  Build helpers, registration scripts, and validation
+scripts/                Repository rules checker and its tests
+tests/                  CTest unit tests
+third_party/            Third-party libraries (nlohmann/json, NanoSVG)
+docs/                   Architecture and validation documentation
 ```
 
-## 注意事项
+## Notes
 
-- 64 位 Explorer 需要 64 位 DLL；32 位 Explorer 需要对应位数 DLL。注册脚本会自动选择 `System32`/`SysWOW64` 的 `regsvr32`。
-- COM 注册需要管理员权限。
-- Win7 支持是设计目标，发布前必须在 Win7 SP1 x64 虚拟机完成回归；当前 VS 2026 工具链和静态 CRT 对 Win7 的支持需要单独验证，若不支持则需换用受支持的旧工具链重新构建。
-- DLL 静态链接 MSVC CRT；若你自己的扩展新增依赖，请重新评估目标机运行库。
-- 不要修改 `build/`、`build-*` 或第三方目录中的生成文件。
+- A 64-bit Explorer requires a 64-bit DLL; use the matching bitness for 32-bit Explorer. The registration scripts select `System32`/`SysWOW64` `regsvr32` automatically.
+- COM registration requires administrator privileges.
+- Windows 7 support is a design target; complete the Win7 SP1 x64 regression before release. The current VS 2026 toolchain and static CRT need separate validation on Win7; if unsupported, rebuild with a supported older toolchain.
+- The DLL links the MSVC CRT statically; re-evaluate the runtime requirements if you add new dependencies.
+- Do not edit generated files under `build/`, `build-*`, or third-party directories.
 
-## COM 标识与许可证
+## COM identity and license
 
-发布 Fork 时请修改 `src/extension/dllmain.cpp` 中的 `CLSID_FileContextMenuExt` 以及 `include/shell_ext/common.h` 中的友好名称。
+When shipping a fork, change `CLSID_FileContextMenuExt` in `src/extension/dllmain.cpp` and the friendly names in `include/shell_ext/common.h`.
 
-本项目派生自微软示例，源文件保留微软原始版权头，许可证为 [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL)。完整许可证文本见仓库根目录 `LICENSE`；nlohmann/json 和 NanoSVG 的第三方声明见 `THIRD_PARTY_NOTICES.md`。
+This project is derived from Microsoft's sample. Source files retain the original Microsoft headers and use the [Ms-PL](https://www.microsoft.com/opensource/licenses.mspx#Ms-PL). The full license text is in `LICENSE`; third-party notices for nlohmann/json and NanoSVG are in `THIRD_PARTY_NOTICES.md`.

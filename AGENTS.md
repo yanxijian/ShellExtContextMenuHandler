@@ -87,8 +87,9 @@ a matching `[x]: <url>` definition. Record behavior changes and new knobs there.
 
 ### R8 - Documentation links resolve **[CI]**
 
-Relative Markdown links must resolve. Bilingual pairs (`README.md` /
-`README.en.md`, architecture docs, contributing/security) must link to each other.
+Relative Markdown links must resolve. The four READMEs (`README.md`, `README.zh-CN.md`,
+`README.ja.md`, `README.ko.md`) must each link to the other three in the configured order,
+and the architecture, contributing and security documents must keep their language pairs.
 
 ## Review and change discipline
 
