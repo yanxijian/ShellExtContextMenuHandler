@@ -288,5 +288,8 @@
       "\\*\\.md\\s+-text -eol",
       "\\*\\.ps1\\s+text eol=lf"
     ]
+  },
+  "comments": {
+    "english": true
   }
 }

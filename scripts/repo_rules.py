@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -295,6 +295,44 @@ class RuleConfig:
                 "stale": language_stale,
             }
 
+        # comments: code comments must be in English (non-Latin script is flagged).
+        comments = data.get("comments", {})
+        self.comment_globs: List[str] = []
+        self.comment_allow_files: List[str] = []
+        self.comment_allow_marker = "cjk-ok"
+        if comments:
+            if not isinstance(comments, dict):
+                raise ConfigError("comments must be an object")
+            if _as_bool(comments.get("english", True), "comments.english"):
+                self.comment_globs = _as_globs(
+                    comments.get(
+                        "globs",
+                        [
+                            "*.c",
+                            "*.cc",
+                            "*.cpp",
+                            "*.cxx",
+                            "*.h",
+                            "*.hh",
+                            "*.hpp",
+                            "*.hxx",
+                            "*.py",
+                            "*.sh",
+                            "*.ps1",
+                            "*.js",
+                            "*.bat",
+                            "*.cmd",
+                        ],
+                    ),
+                    "comments.globs",
+                )
+                self.comment_allow_files = _as_globs(
+                    comments.get("allow_files", []), "comments.allow_files"
+                )
+                self.comment_allow_marker = _as_str(
+                    comments.get("allow_marker", "cjk-ok"), "comments.allow_marker"
+                )
+
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
             raise ConfigError("gitattributes must be an object")
@@ -358,6 +396,66 @@ def rel_path(root: Path, path: Path) -> str:
         return path.resolve().relative_to(root.resolve()).as_posix()
     except ValueError:
         return path.as_posix()
+
+
+NON_LATIN = re.compile(
+    "["
+    "\u3040-\u30ff"  # Hiragana, Katakana
+    "\u3400-\u4dbf"  # CJK extension A
+    "\u4e00-\u9fff"  # CJK unified ideographs
+    "\uac00-\ud7af"  # Hangul syllables
+    "\uff00-\uffef"  # fullwidth forms
+    "\u3000-\u303f"  # CJK punctuation
+    "]"
+)
+
+C_STYLE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp", ".hxx", ".js", ".mjs"}
+HASH_SUFFIXES = {".py", ".sh", ".bash", ".ps1", ".psm1", ".yml", ".yaml", ".rb", ".pl"}
+BATCH_SUFFIXES = {".bat", ".cmd"}
+
+
+def comment_segments(text: str, suffix: str) -> List[Tuple[int, str]]:
+    """Return (line number, comment text) for whole-line and trailing comments.
+
+    Deliberately conservative: only shapes that are unambiguously comments, so the
+    check never fires on a string literal. C-style blocks are tracked across lines.
+    """
+    segments: List[Tuple[int, str]] = []
+    in_block = False
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if suffix in C_STYLE_SUFFIXES:
+            if in_block:
+                segments.append((number, stripped))
+                if "*/" in stripped:
+                    in_block = False
+                continue
+            if stripped.startswith("/*"):
+                segments.append((number, stripped))
+                if "*/" not in stripped:
+                    in_block = True
+                continue
+            if stripped.startswith("//"):
+                segments.append((number, stripped))
+                continue
+            index = line.find("//")
+            if index > 0 and line[:index].count('"') % 2 == 0:
+                segments.append((number, line[index:]))
+            continue
+        if suffix in BATCH_SUFFIXES:
+            if stripped.upper().startswith("REM ") or stripped.startswith("::"):
+                segments.append((number, stripped))
+            continue
+        if suffix in HASH_SUFFIXES:
+            if stripped.startswith("#"):
+                segments.append((number, stripped))
+                continue
+            index = line.find("#")
+            if index > 0 and line[:index].count('"') % 2 == 0 and line[:index].count("'") % 2 == 0:
+                segments.append((number, line[index:]))
+    return segments
 
 
 def first_significant_line(lines: Sequence[str]) -> str:
@@ -529,6 +627,7 @@ class Checker:
             self._check_width(path, rel)
             self._check_forbidden(path, rel)
             self._check_header(path, rel)
+            self._check_comments(path, rel)
 
         self._check_versions()
         self._check_changelog()
@@ -544,6 +643,29 @@ class Checker:
                 self._check_lang_links()
         self._check_gitattributes()
         return self.report
+
+    def _check_comments(self, path: Path, rel: str) -> None:
+        if not self.config.comment_globs:
+            return
+        if not any(match_glob(rel, glob) for glob in self.config.comment_globs):
+            return
+        if any(match_glob(rel, glob) for glob in self.config.comment_allow_files):
+            return
+        try:
+            text = path.read_text(encoding="utf-8-sig", errors="replace")
+        except OSError:
+            return
+        marker = self.config.comment_allow_marker
+        for number, comment in comment_segments(text, path.suffix.lower()):
+            if marker and marker in comment:
+                continue
+            if NON_LATIN.search(comment):
+                self.report.bad(
+                    "%s:%d" % (rel, number),
+                    "comments",
+                    "comment is not English: write code comments in English "
+                    "(append `%s` on the line for a quotation or a data sample)" % marker,
+                )
 
     def _check_encoding(self, path: Path, rel: str, fix: bool) -> None:
         rule = self.config.encoding_for(rel)
