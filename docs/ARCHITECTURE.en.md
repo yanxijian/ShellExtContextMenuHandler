@@ -1,5 +1,7 @@
 # Architecture
 
+<!-- translated-from: docs/ARCHITECTURE.md sha256:332e06797a87 -->
+
 **English** | [简体中文](ARCHITECTURE.md)
 
 ## Design boundary

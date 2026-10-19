@@ -269,6 +269,16 @@
       ],
       "switch_line": true,
       "stale": "warning"
+    },
+    "translations": {
+      "pairs": [
+        [
+          "docs/ARCHITECTURE.md",
+          "docs/ARCHITECTURE.en.md"
+        ]
+      ],
+      "marker": "translated-from:",
+      "stale": "warning"
     }
   },
   "gitattributes": {
