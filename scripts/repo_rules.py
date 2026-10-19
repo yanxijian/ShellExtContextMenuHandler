@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.3.0"
+__version__ = "0.4.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -285,10 +285,14 @@ class RuleConfig:
                 raise ConfigError("markdown.languages.default must not also be listed in variants")
             if len(set(variants)) != len(variants):
                 raise ConfigError("markdown.languages.variants contains duplicates")
+            language_stale = _as_str(languages.get("stale", "off"), "markdown.languages.stale")
+            if language_stale not in ("off", "warning", "error"):
+                raise ConfigError("markdown.languages.stale must be off, warning or error")
             self.languages = {
                 "default": default_name,
                 "variants": variants,
                 "switch_line": _as_bool(languages.get("switch_line", True), "markdown.languages.switch_line"),
+                "stale": language_stale,
             }
 
         gitattributes = data.get("gitattributes", {})
@@ -737,9 +741,11 @@ class Checker:
             else:
                 self.report.bad(name, "languages", "missing language variant")
 
-        if not cfg["switch_line"]:
-            return
+        if cfg["switch_line"]:
+            self._check_language_switch_lines(cfg, ordered, existing)
+        self._check_language_staleness(cfg, existing)
 
+    def _check_language_switch_lines(self, cfg, ordered, existing) -> None:
         for name in existing:
             text = (self.config.root / name).read_bytes().decode("utf-8-sig", errors="replace")
             number, line = language_switch_line(text)
@@ -757,6 +763,40 @@ class Checker:
                     "languages",
                     "switch line lists %s, expected %s" % (found, expected),
                 )
+
+    def _check_language_staleness(self, cfg, existing) -> None:
+        """Each variant records the default file's hash; a changed default means a stale variant."""
+        if cfg["stale"] == "off":
+            return
+        source_name = cfg["default"]
+        source = self.config.root / source_name
+        if not source.is_file():
+            return  # already reported as a missing variant
+        current = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+        marker = self.config.translation_marker
+        for name in existing:
+            if name == source_name:
+                continue
+            text = (self.config.root / name).read_bytes().decode("utf-8-sig", errors="replace")
+            recorded = recorded_translation_sha(text, marker)
+            if recorded is None:
+                self.report.bad(
+                    name,
+                    "languages",
+                    "no `<!-- %s %s sha256:... -->` marker - markdown.languages.stale is on"
+                    % (marker, source_name),
+                )
+                continue
+            if recorded == current:
+                continue
+            message = (
+                "translated from %s at sha256:%s, but the source is now sha256:%s - "
+                "re-read the change and update the marker" % (source_name, recorded, current)
+            )
+            if cfg["stale"] == "error":
+                self.report.bad(name, "language-stale", message)
+            else:
+                self.report.warn(name, "language-stale", message)
 
     def _check_translations(self) -> None:
         for source_name, target_name in self.config.translation_pairs:

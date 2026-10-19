@@ -2,6 +2,8 @@
 
 **한국어** · [English](README.md) · [简体中文](README.zh-CN.md) · [日本語](README.ja.md)
 
+<!-- translated-from: README.md sha256:3db399f4e11f -->
+
 Microsoft의 C++ 셸 확장 샘플을 출발점으로 한, 설정 가능한 Windows 탐색기 상황에 맞는 메뉴(컨텍스트 메뉴) 확장입니다. 메뉴 항목, Shell 등록 대상, 필터, 게이트, 실행기, 아이콘을 설정으로 바꾸고, 복잡한 동작은 C++에 둡니다.
 
 ## 면책

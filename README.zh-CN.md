@@ -1,6 +1,8 @@
 # ShellExtContextMenuHandler
 **简体中文** · [English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
+<!-- translated-from: README.md sha256:3db399f4e11f -->
+
 
 [![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
 

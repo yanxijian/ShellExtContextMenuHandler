@@ -2,6 +2,8 @@
 
 **日本語** · [English](README.md) · [简体中文](README.zh-CN.md) · [한국어](README.ko.md)
 
+<!-- translated-from: README.md sha256:3db399f4e11f -->
+
 Microsoft の C++ シェル拡張サンプルを出発点にした、設定可能な Windows エクスプローラーのコンテキストメニュー拡張です。メニュー項目、Shell の登録ターゲット、フィルタ、ゲート、実行器、アイコンを設定で変えられ、込み入った挙動は C++ 側に置きます。
 
 ## 免責
