@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -268,6 +268,29 @@ class RuleConfig:
                 translations.get("keep_language", False), "markdown.translations.keep_language"
             )
 
+        # markdown.languages: one document set with N ordered language variants.
+        languages = markdown.get("languages")
+        self.languages: Optional[Dict[str, Any]] = None
+        if languages is not None:
+            if not isinstance(languages, dict):
+                raise ConfigError("markdown.languages must be an object")
+            default_name = _as_str(languages.get("default", "README.md"), "markdown.languages.default")
+            variants = [
+                _as_str(item, "markdown.languages.variants[%d]" % index)
+                for index, item in enumerate(_as_list(languages.get("variants", []), "markdown.languages.variants"))
+            ]
+            if not variants:
+                raise ConfigError("markdown.languages.variants must not be empty")
+            if default_name in variants:
+                raise ConfigError("markdown.languages.default must not also be listed in variants")
+            if len(set(variants)) != len(variants):
+                raise ConfigError("markdown.languages.variants contains duplicates")
+            self.languages = {
+                "default": default_name,
+                "variants": variants,
+                "switch_line": _as_bool(languages.get("switch_line", True), "markdown.languages.switch_line"),
+            }
+
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
             raise ConfigError("gitattributes must be an object")
@@ -388,6 +411,53 @@ def missing_changelog_definitions(text: str) -> List[str]:
     return [heading for heading in headings if heading not in definitions]
 
 
+HEADING_RE = re.compile(r"^#\s+\S")
+
+
+def language_switch_line(text: str) -> Tuple[int, str]:
+    """The language switch line: first non-empty line after the H1.
+
+    Returns (1-based line number, line) or (0, "") when the file has no H1 or no
+    line after it. Comment lines are ignored so a provenance marker above the
+    title does not shift the result.
+    """
+    lines = text.splitlines()
+    heading = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        if HEADING_RE.match(stripped):
+            heading = index
+        break
+    if heading is None:
+        return 0, ""
+    for index in range(heading + 1, len(lines)):
+        stripped = lines[index].strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        # A section heading right after the title means there is no switch line.
+        if stripped.startswith("#"):
+            return 0, ""
+        return index + 1, stripped
+    return 0, ""
+
+
+def switch_line_targets(line: str, known: Sequence[str]) -> List[str]:
+    """Targets on a switch line that point at one of the known language files.
+
+    A `*italic*` or plain label is not a link, so the current language (rendered
+    in bold) never shows up here.
+    """
+    found: List[str] = []
+    for match in LINK_RE.finditer(line):
+        target = match.group(2).strip().strip("<>")
+        target = target.split("#", 1)[0]
+        if target in known:
+            found.append(target)
+    return found
+
+
 CJK_END = re.compile(r"[\u4e00-\u9fff]$")
 CJK_START = re.compile(r"^[\u4e00-\u9fff]")
 CJK_PUNCT_END = re.compile(r"[，。；：！？、]$")
@@ -461,6 +531,7 @@ class Checker:
         self._check_required()
         self._check_markdown(files)
         self._check_bilingual()
+        self._check_languages()
         if self.config.translation_pairs:
             self._check_translations()
             if self.config.translation_cjk_wrap:
@@ -653,6 +724,39 @@ class Checker:
                 self.report.bad(left_name, "translation", "does not link to %s" % Path(right_name).name)
             if Path(left_name).name not in right_text:
                 self.report.bad(right_name, "translation", "does not link to %s" % Path(left_name).name)
+
+    def _check_languages(self) -> None:
+        cfg = self.config.languages
+        if cfg is None:
+            return
+        ordered = [cfg["default"]] + list(cfg["variants"])
+        existing = []
+        for name in ordered:
+            if (self.config.root / name).is_file():
+                existing.append(name)
+            else:
+                self.report.bad(name, "languages", "missing language variant")
+
+        if not cfg["switch_line"]:
+            return
+
+        for name in existing:
+            text = (self.config.root / name).read_bytes().decode("utf-8-sig", errors="replace")
+            number, line = language_switch_line(text)
+            if not line:
+                self.report.bad(name, "languages", "no language switch line below the title")
+                continue
+            where = "%s:%d" % (name, number) if number else name
+            if not line.startswith("**"):
+                self.report.bad(where, "languages", "switch line must start with the current language in bold")
+            expected = [other for other in ordered if other != name]
+            found = switch_line_targets(line, ordered)
+            if found != expected:
+                self.report.bad(
+                    where,
+                    "languages",
+                    "switch line lists %s, expected %s" % (found, expected),
+                )
 
     def _check_translations(self) -> None:
         for source_name, target_name in self.config.translation_pairs:
