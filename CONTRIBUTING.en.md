@@ -21,7 +21,7 @@ python tools/validate_menu_json.py
 Before pushing, run the repository rules and the checker tests:
 
 ```powershell
-python scripts/check_repo_rules.py
+python scripts/repo_rules.py check --config repo-rules.json
 python -m unittest discover -s scripts/tests -v
 ```
 

@@ -21,7 +21,7 @@ python tools/validate_menu_json.py
 提交前运行仓库规则和检查器测试：
 
 ```powershell
-python scripts/check_repo_rules.py
+python scripts/repo_rules.py check --config repo-rules.json
 python -m unittest discover -s scripts/tests -v
 ```
 

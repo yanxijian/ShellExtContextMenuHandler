@@ -4,7 +4,7 @@ This file is the project-local source of truth for agents working on
 `ShellExtContextMenuHandler`. The workspace root `AGENTS.md` still applies; this
 file only narrows it for this repository.
 
-Rules marked **[CI]** are enforced by `scripts/check_repo_rules.py` and/or the
+Rules marked **[CI]** are enforced by `scripts/repo_rules.py` (RepoRules, configured by `repo-rules.json`) and/or the
 hygiene workflow. Rules marked **[review]** need judgement.
 
 ## Repository
@@ -30,8 +30,8 @@ python tools/validate_menu_json.py
 Run the repository rules before pushing:
 
 ```powershell
-python scripts/check_repo_rules.py
-python -m unittest discover -s scripts/tests -v
+python scripts/repo_rules.py check --config repo-rules.json
+python scripts/repo_rules.py fix --config repo-rules.json   # only when it reports BOM/EOL
 ```
 
 Install the optional pre-commit hook once per clone:
@@ -46,7 +46,7 @@ git config core.hooksPath .githooks
 
 Every hand-written `.h/.hpp/.c/.cc/.cpp` file is UTF-8 with BOM and CRLF.
 `src/resources/resource.h` is UTF-16LE and is excluded. Use
-`python scripts/check_repo_rules.py --fix` to repair BOM/line endings.
+`python scripts/repo_rules.py fix --config repo-rules.json` to repair BOM/line endings.
 
 ### R2 - 140 columns, `.clang-format` is authoritative **[CI/review]**
 

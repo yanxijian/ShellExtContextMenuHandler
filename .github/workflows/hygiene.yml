@@ -1,8 +1,12 @@
 # Repository rules that do not need a compiler: encoding, line endings, version
-# sync, changelog, documentation links, and the checker's own tests.
+# sync, changelog, documentation links, and the vendored checker's freshness.
 #
 # Separate from ci.yml because documentation/config changes must run these even
 # when no build input changes.
+#
+# The last step compares the vendored checker with upstream RepoRules, so a
+# stale copy fails CI instead of drifting silently. Refresh it with:
+#   python repo_rules.py sync --root <this repo> --hook
 
 name: hygiene
 
@@ -28,7 +32,13 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
 
       - name: Check repository rules
-        run: python3 scripts/check_repo_rules.py
+        run: python3 scripts/repo_rules.py check --config repo-rules.json
 
-      - name: Test the checker
-        run: python3 -m unittest discover -s scripts/tests -v
+      - name: Checkout RepoRules
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          repository: yanxijian/RepoRules
+          path: .repo-rules
+
+      - name: Check vendored checker is current
+        run: python3 .repo-rules/repo_rules.py sync --root . --hook --check

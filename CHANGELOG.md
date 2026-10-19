@@ -6,8 +6,15 @@ number.
 
 ## [Unreleased]
 
-_No unreleased changes yet._
+### Changed
 
+- Repository rules now come from [RepoRules](https://github.com/yanxijian/RepoRules)
+  instead of the repo-local scripts/check_repo_rules.py: the checker is vendored
+  as scripts/repo_rules.py, the policy lives in epo-rules.json, and
+  hygiene.yml additionally fails when the vendored copy falls behind upstream.
+  Rule set is unchanged (encoding/BOM/EOL, 140 columns, no #pragma comment(lib),
+  include guards, version sync, changelog, links, bilingual pairs, required files);
+  the local checker and its unit tests are removed.
 ## [1.0.0] - 2026-10-18
 
 ### Added

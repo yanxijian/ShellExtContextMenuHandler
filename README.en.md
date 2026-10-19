@@ -89,7 +89,7 @@ Alternatively, use an elevated PowerShell:
 
 ## Repository rules and checks
 
-Mechanical rules live in `scripts/check_repo_rules.py` and run in CI via `.github/workflows/hygiene.yml`:
+Mechanical rules come from [RepoRules](https://github.com/yanxijian/RepoRules) (checker vendored as `scripts/repo_rules.py`, configured by `repo-rules.json`) and run in CI via `.github/workflows/hygiene.yml`:
 
 - C/C++ is UTF-8 BOM + CRLF; Markdown is CRLF; CMake, scripts, JSON and YAML are LF (see `.gitattributes` / `.editorconfig`).
 - C/C++ lines stay within 140 columns; headers start with `#pragma once`; no `#pragma comment(lib)` - link Windows libraries through CMake.
@@ -97,8 +97,8 @@ Mechanical rules live in `scripts/check_repo_rules.py` and run in CI via `.githu
 - Relative Markdown links and the Chinese/English document pairs must resolve.
 
 ```powershell
-python scripts/check_repo_rules.py          # check
-python scripts/check_repo_rules.py --fix    # repair BOM/line endings
+python scripts/repo_rules.py check --config repo-rules.json   # check
+python scripts/repo_rules.py fix   --config repo-rules.json   # repair BOM/line endings
 python -m unittest discover -s scripts/tests -v
 ```
 

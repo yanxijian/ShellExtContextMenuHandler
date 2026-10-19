@@ -91,7 +91,7 @@ icons/
 
 ## 工程规范与检查
 
-可机械检查的规范集中在 `scripts/check_repo_rules.py`，CI 在 `.github/workflows/hygiene.yml` 中执行：
+可机械检查的规范由 [RepoRules](https://github.com/yanxijian/RepoRules) 提供（检查器内置为 `scripts/repo_rules.py`、配置在 `repo-rules.json`），CI 在 `.github/workflows/hygiene.yml` 中执行：
 
 - C/C++ 使用 UTF-8 BOM + CRLF；Markdown 使用 CRLF；CMake、脚本、JSON、YAML 使用 LF（见 `.gitattributes` / `.editorconfig`）。
 - C/C++ 行宽不超过 140 列；头文件首行 `#pragma once`；不使用 `#pragma comment(lib)`，Windows 库统一通过 CMake 链接。
@@ -99,8 +99,8 @@ icons/
 - Markdown 相对链接、README/架构文档的中英文互链必须可解析。
 
 ```powershell
-python scripts/check_repo_rules.py          # 检查
-python scripts/check_repo_rules.py --fix    # 修复 BOM/行尾
+python scripts/repo_rules.py check --config repo-rules.json   # 检查
+python scripts/repo_rules.py fix   --config repo-rules.json   # 修复 BOM/行尾
 python -m unittest discover -s scripts/tests -v
 ```
 

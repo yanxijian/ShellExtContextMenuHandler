@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "skip_dirs": [".git", ".vs", "build", "_deps", "third_party", "vcpkg_installed", "out", "x64", "Win32", "Debug", "Release"],
+  "skip_prefixes": ["build-", "build_", "cmake-build"],
+  "skip_globs": ["src/resources/resource.h", "src/resources/*.rc", "*.bmp", "*.png", "*.ico"],
+  "encoding": [
+    { "glob": "*.c", "bom": true, "eol": "crlf" },
+    { "glob": "*.cc", "bom": true, "eol": "crlf" },
+    { "glob": "*.cpp", "bom": true, "eol": "crlf" },
+    { "glob": "*.cxx", "bom": true, "eol": "crlf" },
+    { "glob": "*.h", "bom": true, "eol": "crlf" },
+    { "glob": "*.hh", "bom": true, "eol": "crlf" },
+    { "glob": "*.hpp", "bom": true, "eol": "crlf" },
+    { "glob": "*.hxx", "bom": true, "eol": "crlf" },
+    { "glob": "*.md", "bom": false, "eol": "crlf" },
+    { "glob": "*.mdc", "bom": false, "eol": "crlf" },
+    { "glob": ".clang-format", "bom": false, "eol": "crlf" },
+    { "glob": "CMakeLists.txt", "bom": false, "eol": "lf" },
+    { "glob": "*.cmake", "bom": false, "eol": "lf" },
+    { "glob": "*.txt", "bom": false, "eol": "lf" },
+    { "glob": "*.json", "bom": false, "eol": "lf" },
+    { "glob": "*.yml", "bom": false, "eol": "lf" },
+    { "glob": "*.yaml", "bom": false, "eol": "lf" },
+    { "glob": "*.py", "bom": false, "eol": "lf" },
+    { "glob": "*.ps1", "bom": false, "eol": "lf" },
+    { "glob": "*.sh", "bom": false, "eol": "lf" },
+    { "glob": "*.cmd", "bom": false, "eol": "crlf" },
+    { "glob": "*.bat", "bom": false, "eol": "crlf" },
+    { "glob": "*.in", "bom": false, "eol": "lf" },
+    { "glob": "*.def", "bom": false, "eol": "lf" },
+    { "glob": ".githooks/pre-commit", "bom": false, "eol": "lf" },
+    { "glob": ".gitignore", "bom": false, "eol": "lf" },
+    { "glob": ".gitattributes", "bom": false, "eol": "lf" },
+    { "glob": ".editorconfig", "bom": false, "eol": "lf" },
+    { "glob": "LICENSE", "bom": false, "eol": "lf" }
+  ],
+  "width": { "globs": ["*.c", "*.cc", "*.cpp", "*.cxx", "*.h", "*.hh", "*.hpp", "*.hxx"], "limit": 140, "tab_width": 4 },
+  "forbidden": [
+    { "id": "cmake-libs",
+      "globs": ["*.c", "*.cc", "*.cpp", "*.cxx", "*.h", "*.hh", "*.hpp", "*.hxx"],
+      "pattern": "#\\s*pragma\\s+comment\\s*\\(\\s*(lib|linker)",
+      "message": "link Windows libraries through CMake target_link_libraries" }
+  ],
+  "headers": {
+    "globs": ["*.h", "*.hh", "*.hpp", "*.hxx"],
+    "first_line": "#pragma once",
+    "forbid_namespace_using": true
+  },
+  "versions": [
+    {
+      "id": "dll-version",
+      "sources": [
+        { "path": "CMakeLists.txt", "pattern": "project\\s*\\([^)]*?VERSION\\s+(\\d+)\\.(\\d+)\\.(\\d+)" },
+        { "path": "src/resources/Version.rc", "pattern": "FILEVERSION\\s+(\\d+)\\s*,\\s*(\\d+)\\s*,\\s*(\\d+)" },
+        { "path": "include/shell_ext/common.h", "pattern": "SHELLEXT_VERSION_MAJOR\\s+(\\d+)[\\s\\S]*?SHELLEXT_VERSION_MINOR\\s+(\\d+)[\\s\\S]*?SHELLEXT_VERSION_PATCH\\s+(\\d+)" }
+      ]
+    }
+  ],
+  "changelog": { "path": "CHANGELOG.md", "require": "## [Unreleased]", "link_definitions": true },
+  "required_files": [
+    "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "CHANGELOG.md",
+    "README.md",
+    "README.en.md",
+    "docs/ARCHITECTURE.md",
+    "docs/ARCHITECTURE.en.md",
+    "config/menu.json",
+    "config/registration.json",
+    "AGENTS.md",
+    "repo-rules.json",
+    "scripts/repo_rules.py",
+    ".githooks/pre-commit",
+    ".github/workflows/hygiene.yml"
+  ],
+  "markdown": {
+    "globs": ["*.md"],
+    "check_links": true,
+    "bilingual_pairs": [
+      ["README.md", "README.en.md"],
+      ["docs/ARCHITECTURE.md", "docs/ARCHITECTURE.en.md"],
+      ["CONTRIBUTING.md", "CONTRIBUTING.en.md"],
+      ["SECURITY.md", "SECURITY.en.md"]
+    ]
+  },
+  "gitattributes": {
+    "path": ".gitattributes",
+    "required_patterns": ["\\* text=auto", "\\*\\.md\\s+-text -eol", "\\*\\.ps1\\s+text eol=lf"]
+  }
+}

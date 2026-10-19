@@ -9,7 +9,7 @@
 #   * Resource files are UTF-16LE (resource.h, the main .rc) or UTF-8 (Version.rc);
 #     mark the UTF-16 ones binary so git never rewrites them.
 #
-# scripts/check_repo_rules.py verifies the working tree against this policy.
+# The vendored RepoRules checker (scripts/repo_rules.py + repo-rules.json) verifies the working tree against this policy.
 
 * text=auto
 

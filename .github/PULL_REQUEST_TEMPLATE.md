@@ -15,7 +15,7 @@
 - [ ] `cmake --build build --config Release` passes
 - [ ] `ctest --test-dir build -C Release --output-on-failure` passes
 - [ ] `python tools/validate_menu_json.py` passes
-- [ ] `python scripts/check_repo_rules.py` passes
+- [ ] `python scripts/repo_rules.py check --config repo-rules.json` passes
 - [ ] Added / updated tests when behavior changed
 - [ ] Updated `CHANGELOG.md` if user-visible
 

@@ -168,7 +168,7 @@ cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DSHELLEXT_BUILD_TESTS=ON
 cmake --build build --config Release
 ctest --test-dir build -C Release --output-on-failure
 python tools/validate_menu_json.py
-python scripts/check_repo_rules.py
+python scripts/repo_rules.py check --config repo-rules.json
 python -m unittest discover -s scripts/tests -v
 git -c core.whitespace=cr-at-eol diff --check
 ```
