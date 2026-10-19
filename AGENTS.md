@@ -91,6 +91,19 @@ Relative Markdown links must resolve. The four READMEs (`README.md`, `README.zh-
 `README.ja.md`, `README.ko.md`) must each link to the other three in the configured order,
 and the architecture, contributing and security documents must keep their language pairs.
 
+### R9 - Prose is English **[CI]**
+
+Code comments and commit messages are written in **English**. A quotation, a data
+sample or a pointer to a Chinese document heading may stay in its original
+language, marked with `cjk-ok` on that line (a comment) or anywhere in the
+message (a commit).
+
+- `comments.english` flags non-Latin script in comments; `commit_message.english`
+  rejects a non-English commit in the `.githooks/commit-msg` hook.
+- The translated documents (`README.zh-CN.md` and the `docs/*.en.md` pairs) are
+  the exception: they *are* the other language, and `markdown.translations`
+  tracks them by hash.
+
 ## Review and change discipline
 
 - Correctness first, then lifetime/resource ownership, threading, compatibility,
