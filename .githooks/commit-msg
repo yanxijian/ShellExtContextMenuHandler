@@ -1,0 +1,23 @@
+#!/bin/sh
+# commit-msg hook installed by `repo-rules init`.
+#
+# Rejects a commit message that is not English when `commit_message.english` is
+# on. Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# The same check runs in CI; this hook is a convenience.
+# $1 is the path of the message file git just wrote.
+
+set -e
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+[ -f repo-rules.json ] || exit 0
+
+for candidate in python3 python py; do
+	if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
+		exec "$candidate" scripts/repo_rules.py check-msg "$1" --config repo-rules.json
+	fi
+done
+
+echo "commit-msg: no Python interpreter found; skipping the message check" >&2
+exit 0

@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -54,6 +54,31 @@ for candidate in python3 python py; do
 done
 
 echo "pre-commit: no Python interpreter found; skipping repository rules" >&2
+exit 0
+"""
+
+COMMIT_MSG_HOOK = """#!/bin/sh
+# commit-msg hook installed by `repo-rules init`.
+#
+# Rejects a commit message that is not English when `commit_message.english` is
+# on. Install once per clone:
+#   git config core.hooksPath .githooks
+#
+# The same check runs in CI; this hook is a convenience.
+# $1 is the path of the message file git just wrote.
+
+set -e
+root=$(git rev-parse --show-toplevel)
+cd "$root"
+[ -f repo-rules.json ] || exit 0
+
+for candidate in python3 python py; do
+\tif command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c 'import sys' >/dev/null 2>&1; then
+\t\texec "$candidate" scripts/repo_rules.py check-msg "$1" --config repo-rules.json
+\tfi
+done
+
+echo "commit-msg: no Python interpreter found; skipping the message check" >&2
 exit 0
 """
 
@@ -332,6 +357,20 @@ class RuleConfig:
                 self.comment_allow_marker = _as_str(
                     comments.get("allow_marker", "cjk-ok"), "comments.allow_marker"
                 )
+
+        # commit_message: commit messages are English (checked by the commit-msg hook).
+        commit_message = data.get("commit_message", {})
+        self.commit_message_english = False
+        self.commit_message_marker = "cjk-ok"
+        if commit_message:
+            if not isinstance(commit_message, dict):
+                raise ConfigError("commit_message must be an object")
+            self.commit_message_english = _as_bool(
+                commit_message.get("english", True), "commit_message.english"
+            )
+            self.commit_message_marker = _as_str(
+                commit_message.get("allow_marker", "cjk-ok"), "commit_message.allow_marker"
+            )
 
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
@@ -1087,6 +1126,18 @@ def command_init(args: argparse.Namespace) -> int:
             pass
         print("wrote %s" % hook_target)
 
+    msg_hook = root / ".githooks" / "commit-msg"
+    if msg_hook.exists() and not args.force:
+        print("kept %s (already exists)" % msg_hook)
+    else:
+        msg_hook.parent.mkdir(parents=True, exist_ok=True)
+        msg_hook.write_bytes(COMMIT_MSG_HOOK.encode("utf-8"))
+        try:
+            msg_hook.chmod(0o755)
+        except OSError:
+            pass
+        print("wrote %s" % msg_hook)
+
     workflow_source = RESOURCE_ROOT / "templates" / "github" / "workflows" / "hygiene.yml"
     workflow_target = root / ".github" / "workflows" / "hygiene.yml"
     if workflow_target.exists() and not args.force:
@@ -1101,6 +1152,45 @@ def command_init(args: argparse.Namespace) -> int:
     print("  2. python scripts/repo_rules.py check")
     print("  3. git config core.hooksPath .githooks")
     return 0
+
+
+def command_check_msg(args: argparse.Namespace) -> int:
+    """Reject a commit message that is not English (run from the commit-msg hook)."""
+    path = Path(args.message_file)
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError as exc:
+        print("repo-rules: cannot read the message file: %s" % exc, file=sys.stderr)
+        return 2
+
+    root = Path(getattr(args, "root", ".")).resolve()
+    config_path = root / getattr(args, "config", CONFIG_NAME)
+    try:
+        config = RuleConfig.load(root, config_path.name)
+    except ConfigError as exc:
+        print("repo-rules: %s" % exc, file=sys.stderr)
+        return 2
+
+    if not config.commit_message_english:
+        return 0
+
+    marker = config.commit_message_marker
+    subject = next((line for line in text.splitlines() if line.strip()), "")
+    if marker and marker in text:
+        return 0
+    if not NON_LATIN.search(text):
+        return 0
+
+    print("repo-rules: the commit message must be English", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  subject: %s" % subject, file=sys.stderr)
+    print("", file=sys.stderr)
+    print(
+        "Rewrite it in English. To quote a title or a data sample, put `%s` in the message."
+        % marker,
+        file=sys.stderr,
+    )
+    return 1
 
 
 def command_list_presets(args: argparse.Namespace) -> int:
@@ -1128,6 +1218,7 @@ def command_sync(args: argparse.Namespace) -> int:
     jobs = [(root / dest_rel, source.read_bytes(), False)]
     if want_hook:
         jobs.append((root / ".githooks" / "pre-commit", PRECOMMIT_HOOK.encode("utf-8"), True))
+        jobs.append((root / ".githooks" / "commit-msg", COMMIT_MSG_HOOK.encode("utf-8"), True))
 
     stale = []
     for dst, payload, executable in jobs:
@@ -1181,6 +1272,12 @@ def build_parser() -> argparse.ArgumentParser:
 
     list_presets = subparsers.add_parser("list-presets", help="list built-in presets")
     list_presets.set_defaults(func=command_list_presets)
+
+    check_msg = subparsers.add_parser("check-msg", help="verify a commit message is English")
+    check_msg.add_argument("message_file", help="path of the message file (git passes it to commit-msg)")
+    check_msg.add_argument("--config", default=CONFIG_NAME, help="configuration path relative to --root")
+    check_msg.add_argument("--root", default=".", help="repository root (default: current directory)")
+    check_msg.set_defaults(func=command_check_msg)
 
     sync = subparsers.add_parser("sync", help="sync the vendored checker and hook into a project")
     sync.add_argument("--root", default=".", help="target repository root")
