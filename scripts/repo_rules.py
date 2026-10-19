@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.6.0"
+__version__ = "0.7.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -263,6 +263,8 @@ class RuleConfig:
         self.translation_stale = "warning"
         self.translation_cjk_wrap = False
         self.translation_keep_language = False
+        self.translation_cover: List[Dict[str, Any]] = []
+        self.translation_untracked = False
         if translations is not None:
             if not isinstance(translations, dict):
                 raise ConfigError("markdown.translations must be an object")
@@ -291,6 +293,29 @@ class RuleConfig:
             )
             self.translation_keep_language = _as_bool(
                 translations.get("keep_language", False), "markdown.translations.keep_language"
+            )
+            for index, entry in enumerate(_as_list(translations.get("cover", []), "markdown.translations.cover")):
+                if not isinstance(entry, dict):
+                    raise ConfigError("markdown.translations.cover[%d] must be an object" % index)
+                missing = _as_str(
+                    entry.get("missing", "error"), "markdown.translations.cover[%d].missing" % index
+                )
+                if missing not in ("error", "warning"):
+                    raise ConfigError(
+                        "markdown.translations.cover[%d].missing must be error or warning" % index
+                    )
+                self.translation_cover.append(
+                    {
+                        "from": _as_str(entry.get("from"), "markdown.translations.cover[%d].from" % index),
+                        "to": _as_str(entry.get("to"), "markdown.translations.cover[%d].to" % index),
+                        "ignore": _as_globs(
+                            entry.get("ignore", []), "markdown.translations.cover[%d].ignore" % index
+                        ),
+                        "missing": missing,
+                    }
+                )
+            self.translation_untracked = _as_bool(
+                translations.get("untracked", False), "markdown.translations.untracked"
             )
 
         # markdown.languages: one document set with N ordered language variants.
@@ -680,6 +705,10 @@ class Checker:
                 self._check_cjk_wrap()
             if self.config.translation_keep_language:
                 self._check_lang_links()
+        if self.config.translation_cover:
+            self._check_translation_coverage()
+        if self.config.translation_untracked:
+            self._check_translation_untracked()
         self._check_gitattributes()
         return self.report
 
@@ -991,6 +1020,68 @@ class Checker:
                 self.report.bad(target_name, "translation-stale", message)
             else:
                 self.report.warn(target_name, "translation-stale", message)
+
+    def _check_translation_coverage(self) -> None:
+        """A declared directory pair must be complete: no source doc without its translation."""
+        for entry in self.config.translation_cover:
+            source_root = self.config.root / entry["from"]
+            target_root = self.config.root / entry["to"]
+            if not source_root.is_dir():
+                self.report.bad(entry["from"], "translation-cover", "cover source directory does not exist")
+                continue
+            for path in sorted(source_root.rglob("*.md")):
+                relative = path.relative_to(source_root).as_posix()
+                if any(match_glob(relative, glob) for glob in entry["ignore"]):
+                    continue
+                if (target_root / relative).is_file():
+                    continue
+                where = "%s/%s" % (entry["to"].rstrip("/"), relative)
+                message = (
+                    "no translation next to %s/%s - translate it, or list it in "
+                    "markdown.translations.cover[].ignore to record that it is English-only by design"
+                    % (entry["from"].rstrip("/"), relative)
+                )
+                if entry["missing"] == "warning":
+                    self.report.warn(where, "translation-cover", message)
+                else:
+                    self.report.bad(where, "translation-cover", message)
+
+    def _check_translation_untracked(self) -> None:
+        """A file that looks like a translation must be registered in `pairs`."""
+        tracked = {target for _source, target in self.config.translation_pairs}
+        # A README tracked by markdown.languages carries a translated-from marker
+        # too, so it must not be reported as untracked here.
+        if self.config.languages:
+            tracked.add(self.config.languages["default"])
+            tracked.update(self.config.languages["variants"])
+        candidates: List[str] = []
+
+        for entry in self.config.translation_cover:
+            source_root = self.config.root / entry["from"]
+            target_root = self.config.root / entry["to"]
+            if not source_root.is_dir() or not target_root.is_dir():
+                continue
+            for path in sorted(target_root.rglob("*.md")):
+                relative = path.relative_to(target_root).as_posix()
+                if (source_root / relative).is_file():
+                    candidates.append("%s/%s" % (entry["to"].rstrip("/"), relative))
+
+        suffix = self.config.translation_suffix
+        if suffix:
+            for path in sorted(self.config.root.rglob("*" + suffix)):
+                if self.config.is_skipped(rel_path(self.config.root, path)):
+                    continue
+                candidates.append(rel_path(self.config.root, path))
+
+        for name in candidates:
+            if name in tracked:
+                continue
+            self.report.bad(
+                name,
+                "translation-untracked",
+                "looks like a translation but is not listed in markdown.translations.pairs, "
+                "so it is never checked for staleness",
+            )
 
     def _check_cjk_wrap(self) -> None:
         for _source_name, target_name in self.config.translation_pairs:
