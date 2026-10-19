@@ -48,6 +48,7 @@ CMakeLists.txt   text eol=lf
 *.ps1            text eol=lf
 *.sh             text eol=lf
 .githooks/pre-commit text eol=lf
+.githooks/commit-msg text eol=lf
 *.in             text eol=lf
 *.def            text eol=lf
 .editorconfig    text eol=lf
