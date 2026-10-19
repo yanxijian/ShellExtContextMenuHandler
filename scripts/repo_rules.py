@@ -20,6 +20,7 @@ Or install the console script:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -65,9 +66,13 @@ class ConfigError(Exception):
 class Report:
     problems: List[str] = field(default_factory=list)
     fixed: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
 
     def bad(self, where: str, rule: str, message: str) -> None:
         self.problems.append("%s: [%s] %s" % (where, rule, message))
+
+    def warn(self, where: str, rule: str, message: str) -> None:
+        self.warnings.append("%s: [%s] %s" % (where, rule, message))
 
     def fix(self, where: str, rule: str, message: str) -> None:
         self.fixed.append("%s: [%s] %s" % (where, rule, message))
@@ -226,6 +231,43 @@ class RuleConfig:
                 )
             )
 
+        translations = markdown.get("translations")
+        self.translation_pairs: List[Tuple[str, str]] = []
+        self.translation_marker = "translated-from:"
+        self.translation_suffix = ".zh-CN.md"
+        self.translation_stale = "warning"
+        self.translation_cjk_wrap = False
+        self.translation_keep_language = False
+        if translations is not None:
+            if not isinstance(translations, dict):
+                raise ConfigError("markdown.translations must be an object")
+            pairs = _as_list(translations.get("pairs", []), "markdown.translations.pairs")
+            for index, pair in enumerate(pairs):
+                if not isinstance(pair, list) or len(pair) != 2:
+                    raise ConfigError("markdown.translations.pairs[%d] must be a two-element array" % index)
+                self.translation_pairs.append(
+                    (
+                        _as_str(pair[0], "markdown.translations.pairs[%d][0]" % index),
+                        _as_str(pair[1], "markdown.translations.pairs[%d][1]" % index),
+                    )
+                )
+            self.translation_marker = _as_str(
+                translations.get("marker", "translated-from:"), "markdown.translations.marker"
+            )
+            stale = _as_str(translations.get("stale", "warning"), "markdown.translations.stale")
+            if stale not in ("warning", "error", "off"):
+                raise ConfigError("markdown.translations.stale must be warning, error or off")
+            self.translation_stale = stale
+            self.translation_suffix = _as_str(
+                translations.get("suffix", ".zh-CN.md"), "markdown.translations.suffix"
+            )
+            self.translation_cjk_wrap = _as_bool(
+                translations.get("cjk_wrap", False), "markdown.translations.cjk_wrap"
+            )
+            self.translation_keep_language = _as_bool(
+                translations.get("keep_language", False), "markdown.translations.keep_language"
+            )
+
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
             raise ConfigError("gitattributes must be an object")
@@ -346,6 +388,59 @@ def missing_changelog_definitions(text: str) -> List[str]:
     return [heading for heading in headings if heading not in definitions]
 
 
+CJK_END = re.compile(r"[\u4e00-\u9fff]$")
+CJK_START = re.compile(r"^[\u4e00-\u9fff]")
+CJK_PUNCT_END = re.compile(r"[，。；：！？、]$")
+
+
+def cjk_wrap_lines(text: str) -> List[int]:
+    """1-based lines that start with a CJK character right after a line ending with
+    one: Markdown renders that newline as a space, so the sentence is broken."""
+    lines = text.splitlines()
+    wrapped: List[int] = []
+    in_fence = False
+    for index in range(len(lines) - 1):
+        line = lines[index]
+        nxt = lines[index + 1]
+        if line.lstrip().startswith("```"):
+            in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if line.startswith(("#", "|", "    ")) or nxt.startswith(("#", "|", "    ")):
+            continue
+        if CJK_END.search(line) and not CJK_PUNCT_END.search(line) and CJK_START.match(nxt):
+            wrapped.append(index + 2)
+    return wrapped
+
+
+def recorded_translation_sha(text: str, marker: str) -> Optional[str]:
+    recorded = None
+    for line in text.splitlines():
+        if marker in line:
+            for token in line.replace("-->", " ").split():
+                if token.startswith("sha256:"):
+                    recorded = token[len("sha256:"):]
+    return recorded
+
+
+def missing_translation_links(text: str, base: Path, suffix: str) -> List[Tuple[int, str, str]]:
+    """Relative `.md` links whose translated sibling (`<stem><suffix>`) exists."""
+    out: List[Tuple[int, str, str]] = []
+    for number, label, target in markdown_links(text):
+        if label.strip().lower() == "english":
+            continue
+        if target.startswith(("http://", "https://", "mailto:", "#", "/")):
+            continue
+        path = target.split("#", 1)[0].split("?", 1)[0].strip("<>")
+        if not path.endswith(".md") or path.endswith(suffix):
+            continue
+        candidate = path[:-3] + suffix
+        if (base / candidate).exists():
+            out.append((number, target, candidate))
+    return out
+
+
 class Checker:
     def __init__(self, config: RuleConfig) -> None:
         self.config = config
@@ -366,6 +461,12 @@ class Checker:
         self._check_required()
         self._check_markdown(files)
         self._check_bilingual()
+        if self.config.translation_pairs:
+            self._check_translations()
+            if self.config.translation_cjk_wrap:
+                self._check_cjk_wrap()
+            if self.config.translation_keep_language:
+                self._check_lang_links()
         self._check_gitattributes()
         return self.report
 
@@ -553,6 +654,69 @@ class Checker:
             if Path(left_name).name not in right_text:
                 self.report.bad(right_name, "translation", "does not link to %s" % Path(left_name).name)
 
+    def _check_translations(self) -> None:
+        for source_name, target_name in self.config.translation_pairs:
+            source = self.config.root / source_name
+            target = self.config.root / target_name
+            if not source.is_file():
+                self.report.bad(source_name, "translation", "listed in markdown.translations.pairs but missing")
+                continue
+            if not target.is_file():
+                self.report.bad(target_name, "translation", "missing - the translated set must stay complete")
+                continue
+            text = target.read_text(encoding="utf-8-sig", errors="replace")
+            if self.config.translation_marker not in text:
+                self.report.bad(
+                    target_name,
+                    "translation",
+                    "no `<!-- %s ... sha256:... -->` marker" % self.config.translation_marker.rstrip(":"),
+                )
+                continue
+            recorded = recorded_translation_sha(text, self.config.translation_marker)
+            if recorded is None or self.config.translation_stale == "off":
+                continue
+            current = hashlib.sha256(source.read_bytes()).hexdigest()[:12]
+            if recorded == current:
+                continue
+            message = (
+                "translated from %s at sha256:%s, but the source is now sha256:%s - "
+                "re-read the change and update the marker" % (source_name, recorded, current)
+            )
+            if self.config.translation_stale == "error":
+                self.report.bad(target_name, "translation-stale", message)
+            else:
+                self.report.warn(target_name, "translation-stale", message)
+
+    def _check_cjk_wrap(self) -> None:
+        for _source_name, target_name in self.config.translation_pairs:
+            target = self.config.root / target_name
+            if not target.is_file():
+                continue
+            text = target.read_text(encoding="utf-8-sig", errors="replace")
+            for line in cjk_wrap_lines(text):
+                self.report.bad(
+                    target_name,
+                    "cjk-wrap",
+                    "line %d: a newline between Chinese characters renders as a space; "
+                    "break after punctuation, a Latin token or inline code" % line,
+                )
+
+    def _check_lang_links(self) -> None:
+        for _source_name, target_name in self.config.translation_pairs:
+            target = self.config.root / target_name
+            if not target.is_file():
+                continue
+            text = target.read_text(encoding="utf-8-sig", errors="replace")
+            for line, href, candidate in missing_translation_links(
+                text, target.parent, self.config.translation_suffix
+            ):
+                self.report.bad(
+                    target_name,
+                    "lang-link",
+                    "line %d: links to %s; use %s so the translated page stays in its language"
+                    % (line, href, candidate),
+                )
+
     def _check_gitattributes(self) -> None:
         path = self.config.root / self.config.gitattributes_path
         if not self.config.gitattributes_patterns:
@@ -611,12 +775,15 @@ def command_check(args: argparse.Namespace, fix: bool) -> int:
 
     for line in report.fixed:
         print("fixed  %s" % line)
+    for line in report.warnings:
+        print("warn   %s" % line)
     for line in report.problems:
         print("rule   %s" % line)
     if report.problems:
         print("\n%d violation(s). See the project rules for context." % len(report.problems))
         return 1
-    print("repo-rules: clean (%d file(s))" % len(files))
+    suffix = "" if not report.warnings else ", %d warning(s)" % len(report.warnings)
+    print("repo-rules: clean (%d file(s)%s)" % (len(files), suffix))
     return 0
 
 
