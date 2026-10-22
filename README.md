@@ -2,6 +2,10 @@
 
 **English** · [简体中文](README.zh-CN.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
+[![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
+[![License: Ms-PL](https://img.shields.io/badge/License-Ms--PL-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
+
 A configurable Windows Explorer context-menu extension derived from Microsoft's C++ Shell extension sample. Menu items, Shell registration targets, filters, gates, executors, and icons are configurable; complex behavior stays in C++.
 
 ## Disclaimer

@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -405,6 +405,26 @@ class RuleConfig:
                 commit_message.get("allow_marker", "cjk-ok"), "commit_message.allow_marker"
             )
 
+        # readme_badges: the shields block belongs under the title, above the prose.
+        readme_badges = data.get("readme_badges", {})
+        self.badge_files: List[str] = []
+        self.badge_min = 0
+        self.badge_required: List[str] = []
+        if readme_badges:
+            if not isinstance(readme_badges, dict):
+                raise ConfigError("readme_badges must be an object")
+            self.badge_files = [
+                _as_str(item, "readme_badges.files[%d]" % index)
+                for index, item in enumerate(
+                    _as_list(readme_badges.get("files", ["README.md"]), "readme_badges.files")
+                )
+            ]
+            self.badge_min = int(readme_badges.get("min", 1))
+            self.badge_required = [
+                _as_str(item, "readme_badges.require[%d]" % index)
+                for index, item in enumerate(_as_list(readme_badges.get("require", []), "readme_badges.require"))
+            ]
+
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
             raise ConfigError("gitattributes must be an object")
@@ -633,6 +653,43 @@ def switch_line_targets(line: str, known: Sequence[str]) -> List[str]:
 
 
 CJK_END = re.compile(r"[\u4e00-\u9fff]$")
+
+BADGE_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
+
+
+def badge_block(text: str) -> Tuple[int, List[str]]:
+    """The shield block directly under the title (or under the language line).
+
+    Returns (1-based line number of the first badge, badge lines). Blank lines are
+    skipped; the block ends at the first line that is neither blank nor a badge,
+    which is how "badges at the top" is told apart from "badges somewhere".
+    """
+    lines = text.splitlines()
+    heading = None
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("<!--"):
+            continue
+        if HEADING_RE.match(stripped):
+            heading = index
+        break
+    if heading is None:
+        return 0, []
+
+    number, switch = language_switch_line(text)
+    is_switch = bool(switch) and switch.startswith("**") and "](" in switch
+    start = number if is_switch else heading + 1  # 0-based index of the next line
+
+    badges: List[str] = []
+    for line in lines[start:]:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if "![" in stripped and "](" in stripped:
+            badges.append(stripped)
+            continue
+        break
+    return (start + 1 if badges else 0), badges
 CJK_START = re.compile(r"^[\u4e00-\u9fff]")
 CJK_PUNCT_END = re.compile(r"[，。；：！？、]$")
 
@@ -707,6 +764,7 @@ class Checker:
         self._check_markdown(files)
         self._check_bilingual()
         self._check_languages()
+        self._check_readme_badges()
         if self.config.translation_pairs:
             self._check_translations()
             if self.config.translation_cjk_wrap:
@@ -719,6 +777,36 @@ class Checker:
             self._check_translation_untracked()
         self._check_gitattributes()
         return self.report
+
+    def _check_readme_badges(self) -> None:
+        if not self.config.badge_files:
+            return
+        for name in self.config.badge_files:
+            path = self.config.root / name
+            if not path.is_file():
+                continue  # a missing file is reported by the languages/required rules
+            text = path.read_bytes().decode("utf-8-sig", errors="replace")
+            number, badges = badge_block(text)
+            if not badges:
+                self.report.bad(
+                    name,
+                    "readme-badges",
+                    "no badge block directly under the title (or under the language line) - "
+                    "put the shields above the first paragraph",
+                )
+                continue
+            found = sum(len(BADGE_IMAGE.findall(line)) for line in badges)
+            where = "%s:%d" % (name, number)
+            if found < self.config.badge_min:
+                self.report.bad(
+                    where,
+                    "readme-badges",
+                    "%d badge(s), expected at least %d" % (found, self.config.badge_min),
+                )
+            joined = "\n".join(badges)
+            for pattern in self.config.badge_required:
+                if pattern not in joined:
+                    self.report.bad(where, "readme-badges", "missing required badge: %s" % pattern)
 
     def _check_comments(self, path: Path, rel: str) -> None:
         if not self.config.comment_globs:

@@ -1,10 +1,15 @@
 # ShellExtContextMenuHandler
+
 **简体中文** · [English](README.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
-<!-- translated-from: README.md sha256:3db399f4e11f -->
-
-
 [![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
+[![License: Ms-PL](https://img.shields.io/badge/License-Ms--PL-blue.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
+[![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
+
+<!-- translated-from: README.md sha256:9420ebd75ea5 -->
+
+
 
 基于微软官方 C++ Shell 扩展示例改造的 Windows Explorer 右键菜单扩展。菜单项、Shell 注册目标、过滤器、Gate、Executor 和图标都可以配置，复杂逻辑通过 C++ 扩展。
 
