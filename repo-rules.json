@@ -311,5 +311,16 @@
   "about": {
     "description": "Configurable Windows Explorer context-menu extension (C++17/COM): JSON menus, gates/executors, SVG icons, transactional registration | 可配置的 Windows 资源管理器右键菜单扩展（C++17/COM）：JSON 菜单、Gate/Executor、SVG 图标与事务式注册",
     "order": "en-zh"
+  },
+  "actions": {
+    "require": {
+      "actions/checkout": "v7",
+      "actions/setup-python": "v7",
+      "actions/setup-node": "v7",
+      "actions/upload-artifact": "v7",
+      "actions/download-artifact": "v8",
+      "actions/cache": "v6"
+    },
+    "allow_sha": true
   }
 }

@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -437,6 +437,32 @@ class RuleConfig:
             if self.about_order not in ("en-zh", "zh-en"):
                 raise ConfigError("about.order must be en-zh or zh-en")
 
+        # actions: the major version each GitHub Action must be pinned to.
+        actions = data.get("actions", {})
+        self.actions_globs: List[str] = []
+        self.actions_require: Dict[str, str] = {}
+        self.actions_allow_sha = True
+        if actions:
+            if not isinstance(actions, dict):
+                raise ConfigError("actions must be an object")
+            self.actions_globs = [
+                _as_str(item, "actions.globs[%d]" % index)
+                for index, item in enumerate(
+                    _as_list(
+                        actions.get("globs", [".github/workflows/*.yml", ".github/workflows/*.yaml"]),
+                        "actions.globs",
+                    )
+                )
+            ]
+            require = actions.get("require", {})
+            if not isinstance(require, dict):
+                raise ConfigError("actions.require must be an object")
+            for key, value in require.items():
+                self.actions_require[_as_str(key, "actions.require key")] = _as_str(
+                    value, "actions.require[%s]" % key
+                )
+            self.actions_allow_sha = _as_bool(actions.get("allow_sha", True), "actions.allow_sha")
+
         gitattributes = data.get("gitattributes", {})
         if not isinstance(gitattributes, dict):
             raise ConfigError("gitattributes must be an object")
@@ -666,6 +692,17 @@ def switch_line_targets(line: str, known: Sequence[str]) -> List[str]:
 
 CJK_END = re.compile(r"[\u4e00-\u9fff]$")
 
+# `- uses: owner/action@v7` / `uses: owner/action@<sha>` inside a workflow.
+USES_LINE = re.compile(r"^\s*(?:-\s*)?uses:\s*([A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-/]+)@(\S+)")
+SHA_REF = re.compile(r"^[0-9a-f]{40}$")
+
+
+def action_major(ref: str) -> Optional[int]:
+    """The major number of a tag such as `v7`, `7` or `v7.0.1`; None if unparsable."""
+    match = re.match(r"^v?(\d+)(?:\.|$)", ref)
+    return int(match.group(1)) if match else None
+
+
 BADGE_IMAGE = re.compile(r"!\[[^\]]*\]\(([^)\s]+)")
 
 
@@ -780,6 +817,7 @@ class Checker:
         self._check_languages()
         self._check_readme_badges()
         self._check_about()
+        self._check_actions(files)
         if self.config.translation_pairs:
             self._check_translations()
             if self.config.translation_cjk_wrap:
@@ -792,6 +830,52 @@ class Checker:
             self._check_translation_untracked()
         self._check_gitattributes()
         return self.report
+
+    def _check_actions(self, files: Sequence[Path]) -> None:
+        """Every listed GitHub Action must use the configured major version."""
+        if not self.config.actions_require:
+            return
+        for path in files:
+            rel = rel_path(self.config.root, path)
+            if self.config.is_skipped(rel):
+                continue
+            if not any(match_glob(rel, pattern) for pattern in self.config.actions_globs):
+                continue
+            try:
+                text = path.read_bytes().decode("utf-8-sig", errors="replace")
+            except OSError:
+                continue
+            for number, line in enumerate(text.splitlines(), 1):
+                match = USES_LINE.match(line)
+                if not match:
+                    continue
+                action, ref = match.group(1), match.group(2)
+                wanted = self.config.actions_require.get(action)
+                if wanted is None:
+                    continue
+                where = "%s:%d" % (rel, number)
+                if SHA_REF.match(ref):
+                    if self.config.actions_allow_sha:
+                        continue
+                    self.report.bad(
+                        where,
+                        "actions",
+                        "%s is pinned by a commit SHA; this repository expects @%s"
+                        % (action, wanted),
+                    )
+                    continue
+                actual_major = action_major(ref)
+                wanted_major = action_major(wanted)
+                if actual_major is not None and wanted_major is not None:
+                    if actual_major == wanted_major:
+                        continue
+                elif ref == wanted:
+                    continue
+                self.report.bad(
+                    where,
+                    "actions",
+                    "%s@%s, expected @%s" % (action, ref, wanted),
+                )
 
     def _check_readme_badges(self) -> None:
         if not self.config.badge_files:
