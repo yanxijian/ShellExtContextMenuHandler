@@ -5,7 +5,6 @@
 [![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
 [![License: Ms-PL](https://img.shields.io/badge/License-Ms--PL-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/Platform-Windows-0078D4.svg)](https://www.microsoft.com/windows)
-[![CI](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml/badge.svg)](https://github.com/yanxijian/ShellExtContextMenuHandler/actions/workflows/ci.yml)
 
 <!-- translated-from: README.md sha256:9420ebd75ea5 -->
 

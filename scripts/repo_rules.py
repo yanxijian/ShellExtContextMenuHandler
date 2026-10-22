@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
-__version__ = "0.8.0"
+__version__ = "0.8.1"
 CONFIG_NAME = "repo-rules.json"
 TOOL_ROOT = Path(__file__).resolve().parent
 BOM = b"\xef\xbb\xbf"
@@ -690,6 +690,8 @@ def badge_block(text: str) -> Tuple[int, List[str]]:
             continue
         break
     return (start + 1 if badges else 0), badges
+
+
 CJK_START = re.compile(r"^[\u4e00-\u9fff]")
 CJK_PUNCT_END = re.compile(r"[，。；：！？、]$")
 
@@ -804,6 +806,16 @@ class Checker:
                     "%d badge(s), expected at least %d" % (found, self.config.badge_min),
                 )
             joined = "\n".join(badges)
+            seen: Dict[str, int] = {}
+            for target in BADGE_IMAGE.findall(joined):
+                seen[target] = seen.get(target, 0) + 1
+            for target, count in seen.items():
+                if count > 1:
+                    self.report.bad(
+                        where,
+                        "readme-badges",
+                        "the same badge appears %d times: %s" % (count, target),
+                    )
             for pattern in self.config.badge_required:
                 if pattern not in joined:
                     self.report.bad(where, "readme-badges", "missing required badge: %s" % pattern)
